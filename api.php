@@ -423,6 +423,24 @@ switch ($action) {
 
     // 服务器信息
     case 'server':
+        // 获取当前用户
+        $current_user = '';
+        if (function_exists('posix_getpwuid') && function_exists('posix_geteuid')) {
+            $user_info = @posix_getpwuid(posix_geteuid());
+            if ($user_info) {
+                $current_user = $user_info['name'];
+            }
+        }
+        if (empty($current_user)) {
+            $current_user = @get_current_user();
+        }
+        if (empty($current_user) && isset($_SERVER['USER'])) {
+            $current_user = $_SERVER['USER'];
+        }
+        if (empty($current_user)) {
+            $current_user = 'Unknown';
+        }
+
         response(true, array(
             'php_version' => phpversion(),
             'server_software' => isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : 'Unknown',
@@ -431,7 +449,8 @@ switch ($action) {
             'upload_max' => ini_get('upload_max_filesize'),
             'post_max' => ini_get('post_max_size'),
             'disk_free' => formatSize(@disk_free_space('/') ? disk_free_space('/') : 0),
-            'disk_total' => formatSize(@disk_total_space('/') ? disk_total_space('/') : 0)
+            'disk_total' => formatSize(@disk_total_space('/') ? disk_total_space('/') : 0),
+            'current_user' => $current_user
         ), '');
         break;
 

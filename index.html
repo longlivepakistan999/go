@@ -460,6 +460,7 @@
                 </div>
             </div>
             <div class="header-info" id="headerInfo">
+                <div class="header-info-item"><span class="label">用户:</span><span class="value" id="infoUser">-</span></div>
                 <div class="header-info-item"><span class="label">PHP:</span><span class="value" id="infoPhp">-</span></div>
                 <div class="header-info-item"><span class="label">服务器:</span><span class="value" id="infoServer">-</span></div>
                 <div class="header-info-item"><span class="label">磁盘:</span><span class="value" id="infoDisk">-</span></div>
@@ -642,6 +643,7 @@
             const result = await apiRequest('server');
             if (result.success) {
                 const info = result.data;
+                document.getElementById('infoUser').textContent = info.current_user || '-';
                 document.getElementById('infoPhp').textContent = info.php_version;
                 document.getElementById('infoServer').textContent = info.server_software.split('/')[0];
                 document.getElementById('infoDisk').textContent = info.disk_free + ' / ' + info.disk_total;
