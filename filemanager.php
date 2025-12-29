@@ -332,13 +332,56 @@ $breadcrumbs = getBreadcrumbs($currentDir);
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 20px;
+        }
+
+        .header-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 15px;
         }
 
         .header h1 {
             font-size: 24px;
+        }
+
+        .header-path {
+            background: rgba(255,255,255,0.15);
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .header-path .path-icon {
+            margin-right: 10px;
+            font-size: 16px;
+        }
+
+        .header-path a {
+            color: #fff;
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .header-path a:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .header-path .separator {
+            color: rgba(255,255,255,0.6);
+            margin: 0 2px;
+        }
+
+        .header-path .current {
+            background: rgba(255,255,255,0.25);
+            font-weight: 600;
         }
 
         .header-actions a {
@@ -353,28 +396,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
 
         .header-actions a:hover {
             background: rgba(255,255,255,0.3);
-        }
-
-        .breadcrumb {
-            background: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .breadcrumb a {
-            color: #667eea;
-            text-decoration: none;
-        }
-
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-
-        .breadcrumb span {
-            color: #999;
-            margin: 0 8px;
         }
 
         .message {
@@ -744,9 +765,13 @@ $breadcrumbs = getBreadcrumbs($currentDir);
                 overflow-x: auto;
             }
 
-            .header {
+            .header-top {
                 flex-direction: column;
-                gap: 15px;
+                gap: 10px;
+            }
+
+            .header-path {
+                font-size: 12px;
             }
         }
     </style>
@@ -754,11 +779,26 @@ $breadcrumbs = getBreadcrumbs($currentDir);
 <body>
     <div class="container">
         <div class="header">
-            <h1>PHP 文件管理器</h1>
-            <div class="header-actions">
-                <a href="?dir=<?php echo urlencode($currentDir); ?>">文件列表</a>
-                <a href="?serverinfo=1">服务器信息</a>
+            <div class="header-top">
+                <h1>PHP 文件管理器</h1>
+                <div class="header-actions">
+                    <a href="?dir=<?php echo urlencode(ROOT_PATH); ?>">文件列表</a>
+                    <a href="?serverinfo=1">服务器信息</a>
+                </div>
             </div>
+            <?php if (!$serverInfoMode): ?>
+            <div class="header-path">
+                <span class="path-icon">📂</span>
+                <?php foreach ($breadcrumbs as $i => $crumb): ?>
+                    <?php if ($i > 0): ?><span class="separator">/</span><?php endif; ?>
+                    <?php if ($i === count($breadcrumbs) - 1): ?>
+                        <span class="current"><?php echo htmlspecialchars($crumb['name']); ?></span>
+                    <?php else: ?>
+                        <a href="?dir=<?php echo urlencode($crumb['path']); ?>"><?php echo htmlspecialchars($crumb['name']); ?></a>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
         </div>
 
         <?php if ($message): ?>
@@ -853,10 +893,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
 
         <?php elseif ($editMode): ?>
         <!-- 编辑文件 -->
-        <div class="breadcrumb">
-            编辑文件: <?php echo htmlspecialchars($editPath); ?>
-        </div>
-
         <div class="editor">
             <h2>编辑文件</h2>
             <form method="post" action="?dir=<?php echo urlencode($currentDir); ?>">
@@ -872,10 +908,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
 
         <?php elseif ($viewMode): ?>
         <!-- 查看文件 -->
-        <div class="breadcrumb">
-            查看文件: <?php echo htmlspecialchars($viewPath); ?>
-        </div>
-
         <div class="viewer">
             <h2>文件内容</h2>
             <pre><?php echo htmlspecialchars($viewContent); ?></pre>
@@ -887,13 +919,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
 
         <?php else: ?>
         <!-- 文件列表 -->
-        <div class="breadcrumb">
-            <?php foreach ($breadcrumbs as $i => $crumb): ?>
-                <?php if ($i > 0): ?><span>/</span><?php endif; ?>
-                <a href="?dir=<?php echo urlencode($crumb['path']); ?>"><?php echo htmlspecialchars($crumb['name']); ?></a>
-            <?php endforeach; ?>
-        </div>
-
         <div class="toolbar">
             <!-- 上传文件 -->
             <form method="post" enctype="multipart/form-data">
