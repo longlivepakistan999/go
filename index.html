@@ -143,6 +143,28 @@
             transition: background 0.2s;
         }
         .header-actions button:hover { background: rgba(255,255,255,0.3); }
+        .header-info {
+            background: rgba(0,0,0,0.2);
+            padding: 8px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .header-info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .header-info-item .label {
+            color: rgba(255,255,255,0.7);
+        }
+        .header-info-item .value {
+            color: #fff;
+            font-weight: 500;
+        }
         .header-path {
             background: rgba(255,255,255,0.15);
             padding: 12px 15px;
@@ -434,9 +456,14 @@
             <div class="header-top">
                 <h1>远程文件管理器</h1>
                 <div class="header-actions">
-                    <button onclick="showServerInfo()">服务器信息</button>
                     <button onclick="disconnect()">断开连接</button>
                 </div>
+            </div>
+            <div class="header-info" id="headerInfo">
+                <div class="header-info-item"><span class="label">PHP:</span><span class="value" id="infoPhp">-</span></div>
+                <div class="header-info-item"><span class="label">服务器:</span><span class="value" id="infoServer">-</span></div>
+                <div class="header-info-item"><span class="label">磁盘:</span><span class="value" id="infoDisk">-</span></div>
+                <div class="header-info-item"><span class="label">上传限制:</span><span class="value" id="infoUpload">-</span></div>
             </div>
             <div class="header-path">
                 <span class="current-path" id="currentPath">/</span>
@@ -602,8 +629,22 @@
                 // 直接使用返回的数据渲染目录
                 state.currentPath = '/';
                 renderDirectory(result.data);
+                // 加载服务器信息
+                loadServerInfo();
             } else {
                 errorEl.textContent = result.message || '连接失败';
+            }
+        }
+
+        // 加载服务器信息到头部
+        async function loadServerInfo() {
+            const result = await apiRequest('server');
+            if (result.success) {
+                const info = result.data;
+                document.getElementById('infoPhp').textContent = info.php_version;
+                document.getElementById('infoServer').textContent = info.server_software.split('/')[0];
+                document.getElementById('infoDisk').textContent = info.disk_free + ' / ' + info.disk_total;
+                document.getElementById('infoUpload').textContent = info.upload_max;
             }
         }
 
@@ -964,27 +1005,6 @@
 访问时间: ${formatTime(info.atime)}
 所有者ID: ${info.owner}
 组ID: ${info.group}`);
-        }
-
-        // 服务器信息
-        async function showServerInfo() {
-            const result = await apiRequest('server');
-
-            if (!result.success) {
-                showToast(result.message, 'error');
-                return;
-            }
-
-            const info = result.data;
-            alert(`服务器信息:
-PHP版本: ${info.php_version}
-服务器: ${info.server_software}
-文档根目录: ${info.document_root}
-API路径: ${info.script_path}
-上传限制: ${info.upload_max}
-POST限制: ${info.post_max}
-磁盘可用: ${info.disk_free}
-磁盘总量: ${info.disk_total}`);
         }
 
         // 工具函数
