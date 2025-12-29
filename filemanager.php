@@ -424,20 +424,56 @@ $breadcrumbs = getBreadcrumbs($currentDir);
 
         .toolbar {
             background: white;
-            padding: 15px 20px;
+            padding: 20px;
             border-radius: 8px;
             margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
-            gap: 15px;
+            gap: 20px;
             flex-wrap: wrap;
-            align-items: center;
         }
 
-        .toolbar form {
+        .toolbar-form {
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .toolbar-form .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toolbar-form .form-label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .toolbar-form .form-label code {
+            background: #e9ecef;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            color: #667eea;
+            word-break: break-all;
+        }
+
+        .toolbar-form .form-row {
             display: flex;
             gap: 10px;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-form .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            color: #555;
+            white-space: nowrap;
         }
 
         .toolbar input[type="text"],
@@ -448,8 +484,15 @@ $breadcrumbs = getBreadcrumbs($currentDir);
             font-size: 14px;
         }
 
+        .toolbar input[type="text"] {
+            flex: 1;
+            min-width: 150px;
+        }
+
         .toolbar input[type="file"] {
             padding: 5px;
+            flex: 1;
+            min-width: 180px;
         }
 
         .btn {
@@ -757,8 +800,23 @@ $breadcrumbs = getBreadcrumbs($currentDir);
                 align-items: stretch;
             }
 
-            .toolbar form {
-                flex-wrap: wrap;
+            .toolbar {
+                flex-direction: column;
+            }
+
+            .toolbar-form {
+                width: 100%;
+                min-width: auto;
+            }
+
+            .toolbar-form .form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .toolbar input[type="text"],
+            .toolbar input[type="file"] {
+                width: 100%;
             }
 
             .file-table {
@@ -921,19 +979,29 @@ $breadcrumbs = getBreadcrumbs($currentDir);
         <!-- 文件列表 -->
         <div class="toolbar">
             <!-- 上传文件 -->
-            <form method="post" enctype="multipart/form-data">
-                <input type="file" name="upload_file" required>
-                <button type="submit" class="btn btn-primary">上传文件</button>
+            <form method="post" enctype="multipart/form-data" class="toolbar-form">
+                <div class="form-group">
+                    <label class="form-label">上传到: <code><?php echo htmlspecialchars($currentDir); ?>/</code></label>
+                    <div class="form-row">
+                        <input type="file" name="upload_file" required>
+                        <button type="submit" class="btn btn-primary">上传文件</button>
+                    </div>
+                </div>
             </form>
 
             <!-- 创建文件/目录 -->
-            <form method="post">
+            <form method="post" class="toolbar-form">
                 <input type="hidden" name="action" value="create">
-                <input type="text" name="new_name" placeholder="新文件/目录名" required>
-                <label>
-                    <input type="checkbox" name="is_dir" value="1"> 创建目录
-                </label>
-                <button type="submit" class="btn btn-success">创建</button>
+                <div class="form-group">
+                    <label class="form-label">创建到: <code><?php echo htmlspecialchars($currentDir); ?>/</code></label>
+                    <div class="form-row">
+                        <input type="text" name="new_name" placeholder="新文件/目录名" required>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="is_dir" value="1"> 目录
+                        </label>
+                        <button type="submit" class="btn btn-success">创建</button>
+                    </div>
+                </div>
             </form>
         </div>
 
