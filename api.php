@@ -369,11 +369,6 @@ switch ($action) {
         ]);
         break;
 
-    // 测试连接
-    case 'ping':
-        response(true, ['time' => time()], '连接成功');
-        break;
-
     default:
         response(false, null, '未知操作');
 }

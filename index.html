@@ -533,7 +533,7 @@
         }
 
         // API 请求
-        async function apiRequest(action, params = {}, method = 'GET') {
+        async function apiRequest(action, params = {}, method = 'GET', timeout = 10000) {
             const url = new URL(state.serverUrl);
 
             if (method === 'GET') {
@@ -541,9 +541,13 @@
                 Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
             }
 
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
             const options = {
                 method,
-                headers: { 'X-Password': state.password }
+                headers: { 'X-Password': state.password },
+                signal: controller.signal
             };
 
             if (method === 'POST') {
@@ -560,10 +564,15 @@
 
             try {
                 const response = await fetch(url, options);
+                clearTimeout(timeoutId);
                 const data = await response.json();
                 return data;
             } catch (error) {
-                return { success: false, message: '网络错误: ' + error.message };
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    return { success: false, message: '连接超时' };
+                }
+                return { success: false, message: '连接失败: ' + error.message };
             }
         }
 
@@ -583,13 +592,16 @@
 
             errorEl.textContent = '连接中...';
 
-            const result = await apiRequest('ping');
+            // 使用list接口验证连接，5秒超时
+            const result = await apiRequest('list', { path: '/' }, 'GET', 5000);
 
             if (result.success) {
                 saveServer(url);
                 document.getElementById('connectPanel').classList.add('hidden');
                 document.getElementById('mainApp').classList.add('active');
-                loadDirectory('/');
+                // 直接使用返回的数据渲染目录
+                state.currentPath = '/';
+                renderDirectory(result.data);
             } else {
                 errorEl.textContent = result.message || '连接失败';
             }
@@ -647,26 +659,17 @@
             loadSavedServers();
         }
 
-        // 加载目录
-        async function loadDirectory(path) {
+        // 渲染目录内容
+        function renderDirectory(data) {
+            const path = data.path;
             state.currentPath = path;
             document.getElementById('currentPath').textContent = path;
             document.getElementById('uploadPath').textContent = path + '/';
             document.getElementById('createPath').textContent = path + '/';
-
             updatePathNav(path);
 
             const fileList = document.getElementById('fileList');
-            fileList.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
-
-            const result = await apiRequest('list', { path });
-
-            if (!result.success) {
-                fileList.innerHTML = `<tr><td colspan="6" class="loading" style="color:#dc3545">${result.message}</td></tr>`;
-                return;
-            }
-
-            fileList.innerHTML = result.data.items.map(item => `
+            fileList.innerHTML = data.items.map(item => `
                 <tr oncontextmenu="showContextMenu(event, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
                     <td>
                         <div class="name-cell" onclick="itemClick(${JSON.stringify(item).replace(/"/g, '&quot;')})">
@@ -694,6 +697,21 @@
                     </td>
                 </tr>
             `).join('');
+        }
+
+        // 加载目录
+        async function loadDirectory(path) {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+
+            const result = await apiRequest('list', { path });
+
+            if (!result.success) {
+                fileList.innerHTML = `<tr><td colspan="6" class="loading" style="color:#dc3545">${result.message}</td></tr>`;
+                return;
+            }
+
+            renderDirectory(result.data);
         }
 
         // 更新路径导航
