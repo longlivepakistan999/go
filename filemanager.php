@@ -1041,7 +1041,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
                         <th>名称</th>
                         <th>大小</th>
                         <th>权限</th>
-                        <th>创建时间</th>
                         <th>修改时间</th>
                         <th>状态</th>
                         <th>操作</th>
@@ -1065,9 +1064,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
                         <td>
                             <span class="perms"><?php echo $item['perms']; ?></span>
                             <span class="perms-octal">(<?php echo $item['octal']; ?>)</span>
-                        </td>
-                        <td>
-                            <?php echo $item['ctime'] ? date('Y-m-d H:i:s', $item['ctime']) : '-'; ?>
                         </td>
                         <td>
                             <?php echo $item['mtime'] ? date('Y-m-d H:i:s', $item['mtime']) : '-'; ?>
