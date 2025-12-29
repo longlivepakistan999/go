@@ -72,12 +72,26 @@ if (!empty($PASSWORD) && $PASSWORD !== 'your_password_here') {
     }
 }
 
+// 获取默认目录（脚本所在目录）
+function getDefaultDir() {
+    return dirname(__FILE__);
+}
+
 // 安全路径处理
 function safePath($path) {
     $path = str_replace(array('../', '..\\'), '', $path);
-    if (empty($path)) return '/';
-    $real = realpath($path);
-    if ($real === false) return $path;
+
+    // 空路径或根目录，返回脚本所在目录
+    if (empty($path) || $path === '/') {
+        return getDefaultDir();
+    }
+
+    // 使用@抑制open_basedir警告
+    $real = @realpath($path);
+    if ($real === false) {
+        // 如果realpath失败，尝试返回脚本目录
+        return getDefaultDir();
+    }
     return $real;
 }
 
