@@ -13,9 +13,18 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-Password');
 
+// 设置HTTP状态码（兼容PHP5）
+function setHttpCode($code) {
+    if (function_exists('http_response_code')) {
+        http_response_code($code);
+    } else {
+        header('X-PHP-Response-Code: ' . $code, true, $code);
+    }
+}
+
 // 处理预检请求
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+    setHttpCode(200);
     exit;
 }
 
@@ -57,7 +66,7 @@ if (isset($_SERVER['HTTP_X_PASSWORD'])) {
 // 验证密码
 if (!empty($PASSWORD) && $PASSWORD !== 'your_password_here') {
     if ($password !== $PASSWORD) {
-        http_response_code(401);
+        setHttpCode(401);
         echo '{null}';
         exit;
     }
@@ -78,6 +87,15 @@ function formatSize($bytes) {
     $units = array('B', 'KB', 'MB', 'GB', 'TB');
     $i = floor(log($bytes, 1024));
     return round($bytes / pow(1024, $i), 2) . ' ' . $units[$i];
+}
+
+// 文件排序函数（PHP5兼容）
+function sortItems($a, $b) {
+    if ($a['name'] === '..') return -1;
+    if ($b['name'] === '..') return 1;
+    if ($a['is_dir'] && !$b['is_dir']) return -1;
+    if (!$a['is_dir'] && $b['is_dir']) return 1;
+    return strcasecmp($a['name'], $b['name']);
 }
 
 // 获取文件权限字符串
@@ -148,13 +166,7 @@ switch ($action) {
         }
 
         // 排序：目录在前
-        usort($items, function($a, $b) {
-            if ($a['name'] === '..') return -1;
-            if ($b['name'] === '..') return 1;
-            if ($a['is_dir'] && !$b['is_dir']) return -1;
-            if (!$a['is_dir'] && $b['is_dir']) return 1;
-            return strcasecmp($a['name'], $b['name']);
-        });
+        usort($items, 'sortItems');
 
         response(true, array(
             'path' => $path,
@@ -314,7 +326,7 @@ switch ($action) {
         $path = safePath(getParam('path', ''));
 
         if (!@is_file($path) || !@is_readable($path)) {
-            http_response_code(404);
+            setHttpCode(404);
             exit('文件不存在');
         }
 
