@@ -369,6 +369,59 @@
             gap: 10px;
         }
 
+        /* 时间编辑表单 */
+        .time-edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .time-edit-path {
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #495057;
+            word-break: break-all;
+        }
+        .time-edit-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .time-edit-group label {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+        .time-edit-group input {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .time-edit-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .time-edit-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            color: white;
+        }
+        .time-edit-preview .label {
+            font-weight: 500;
+        }
+        .time-edit-preview .value {
+            font-family: monospace;
+            font-size: 15px;
+        }
+
         /* 消息提示 */
         .toast {
             position: fixed;
@@ -524,6 +577,37 @@
         </div>
     </div>
 
+    <!-- 时间修改模态框 -->
+    <div class="modal" id="timeModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>修改时间</h2>
+                <span class="close" onclick="closeTimeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="time-edit-form">
+                    <div class="time-edit-path" id="timeEditPath"></div>
+                    <div class="time-edit-group">
+                        <label>日期</label>
+                        <input type="date" id="timeEditDate">
+                    </div>
+                    <div class="time-edit-group">
+                        <label>时间</label>
+                        <input type="time" id="timeEditTime" step="1">
+                    </div>
+                    <div class="time-edit-preview">
+                        <span class="label">预览:</span>
+                        <span class="value" id="timePreview">-</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeTimeModal()">取消</button>
+                <button class="btn-success" onclick="submitTimeChange()">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 右键菜单 -->
     <div class="context-menu" id="contextMenu">
         <div class="context-menu-item" onclick="contextAction('open')">打开</div>
@@ -550,6 +634,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadSavedServers();
             document.addEventListener('click', () => hideContextMenu());
+
+            // 时间编辑实时预览
+            document.getElementById('timeEditDate').addEventListener('input', updateTimePreview);
+            document.getElementById('timeEditTime').addEventListener('input', updateTimePreview);
         });
 
         // 显示消息
@@ -978,26 +1066,65 @@
             hideContextMenu();
         }
 
-        // 修改文件时间
-        async function touchFile(path, currentTime) {
-            // 格式化当前时间为 datetime-local 格式
+        // 打开时间修改模态框
+        function touchFile(path, currentTime) {
+            state.touchPath = path;
             const date = currentTime ? new Date(currentTime * 1000) : new Date();
-            const formatted = date.toISOString().slice(0, 16);
 
-            const newTime = prompt('修改时间 (格式: YYYY-MM-DDTHH:MM):', formatted);
-            if (!newTime) return;
+            // 设置日期和时间输入框
+            const dateStr = date.toISOString().slice(0, 10);
+            const timeStr = date.toTimeString().slice(0, 8);
 
-            // 解析输入的时间
-            const timestamp = Math.floor(new Date(newTime).getTime() / 1000);
+            document.getElementById('timeEditPath').textContent = path;
+            document.getElementById('timeEditDate').value = dateStr;
+            document.getElementById('timeEditTime').value = timeStr;
+            updateTimePreview();
+
+            document.getElementById('timeModal').classList.add('active');
+        }
+
+        // 更新时间预览
+        function updateTimePreview() {
+            const dateVal = document.getElementById('timeEditDate').value;
+            const timeVal = document.getElementById('timeEditTime').value;
+            if (dateVal && timeVal) {
+                const preview = `${dateVal} ${timeVal}`;
+                document.getElementById('timePreview').textContent = preview;
+            }
+        }
+
+        // 关闭时间模态框
+        function closeTimeModal() {
+            document.getElementById('timeModal').classList.remove('active');
+            state.touchPath = null;
+        }
+
+        // 提交时间修改
+        async function submitTimeChange() {
+            if (!state.touchPath) {
+                closeTimeModal();
+                return;
+            }
+
+            const dateVal = document.getElementById('timeEditDate').value;
+            const timeVal = document.getElementById('timeEditTime').value;
+
+            if (!dateVal || !timeVal) {
+                showToast('请填写日期和时间', 'error');
+                return;
+            }
+
+            const timestamp = Math.floor(new Date(`${dateVal}T${timeVal}`).getTime() / 1000);
             if (isNaN(timestamp)) {
                 showToast('时间格式错误', 'error');
                 return;
             }
 
-            const result = await apiRequest('touch', { path, time: timestamp }, 'POST');
+            const result = await apiRequest('touch', { path: state.touchPath, time: timestamp }, 'POST');
 
             if (result.success) {
                 showToast('修改时间成功');
+                closeTimeModal();
                 loadDirectory(state.currentPath);
             } else {
                 showToast(result.message, 'error');
