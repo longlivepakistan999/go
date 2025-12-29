@@ -89,10 +89,22 @@ function safePath($path) {
     // 使用@抑制open_basedir警告
     $real = @realpath($path);
     if ($real === false) {
-        // 如果realpath失败，尝试返回脚本目录
-        return getDefaultDir();
+        // realpath失败，返回原路径让后续检查处理
+        return $path;
     }
     return $real;
+}
+
+// 检查路径是否可访问
+function checkPathAccess($path) {
+    // 使用@抑制警告
+    if (!@file_exists($path)) {
+        return array('ok' => false, 'error' => '路径不存在或无权限访问');
+    }
+    if (@is_dir($path) && !@is_readable($path)) {
+        return array('ok' => false, 'error' => '无权限读取此目录');
+    }
+    return array('ok' => true, 'error' => '');
 }
 
 // 格式化文件大小
@@ -140,19 +152,21 @@ switch ($action) {
     case 'list':
         $path = safePath(getParam('path', '/'));
 
-        if (!@is_dir($path)) {
-            response(false, null, '目录不存在');
+        // 检查路径访问权限
+        $access = checkPathAccess($path);
+        if (!$access['ok']) {
+            response(false, null, $access['error']);
         }
 
-        if (!@is_readable($path)) {
-            response(false, null, '无权限读取');
+        if (!@is_dir($path)) {
+            response(false, null, '不是有效目录');
         }
 
         $items = array();
         $files = @scandir($path);
 
         if ($files === false) {
-            response(false, null, '无法读取目录');
+            response(false, null, '无权限访问此目录');
         }
 
         foreach ($files as $file) {
