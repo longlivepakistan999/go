@@ -824,7 +824,7 @@
                             <button class="btn-success" onclick="downloadFile('${escapeHtml(item.path)}')">下载</button>
                         ` : ''}
                         ${item.name !== '..' ? `
-                            <button class="btn-secondary" onclick="touchFile('${escapeHtml(item.path)}', ${item.mtime || 0})">时间</button>
+                            <button class="btn-secondary" onclick="touchFile('${escapeHtml(item.path)}', ${item.mtime || 0})">修改时间</button>
                             <button class="btn-danger" onclick="deleteItem('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')">删除</button>
                         ` : ''}
                     </td>
