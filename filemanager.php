@@ -272,6 +272,7 @@ if (is_dir($currentDir) && is_readable($currentDir)) {
             'size' => @is_file($itemPath) ? @filesize($itemPath) : 0,
             'perms' => formatPerms($itemPath),
             'octal' => getOctalPerms($itemPath),
+            'ctime' => @filectime($itemPath) ?: 0,
             'mtime' => @filemtime($itemPath) ?: 0,
             'readable' => @is_readable($itemPath),
             'writable' => @is_writable($itemPath)
@@ -1040,6 +1041,7 @@ $breadcrumbs = getBreadcrumbs($currentDir);
                         <th>名称</th>
                         <th>大小</th>
                         <th>权限</th>
+                        <th>创建时间</th>
                         <th>修改时间</th>
                         <th>状态</th>
                         <th>操作</th>
@@ -1065,7 +1067,10 @@ $breadcrumbs = getBreadcrumbs($currentDir);
                             <span class="perms-octal">(<?php echo $item['octal']; ?>)</span>
                         </td>
                         <td>
-                            <?php echo date('Y-m-d H:i:s', $item['mtime']); ?>
+                            <?php echo $item['ctime'] ? date('Y-m-d H:i:s', $item['ctime']) : '-'; ?>
+                        </td>
+                        <td>
+                            <?php echo $item['mtime'] ? date('Y-m-d H:i:s', $item['mtime']) : '-'; ?>
                         </td>
                         <td>
                             <?php if ($item['readable']): ?>
