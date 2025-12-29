@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>远程文件管理器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+
+        /* 连接面板 */
+        .connect-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .connect-panel.hidden { display: none; }
+        .connect-box {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 400px;
+            max-width: 90%;
+        }
+        .connect-box h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        .connect-box .form-group {
+            margin-bottom: 20px;
+        }
+        .connect-box label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        .connect-box input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .connect-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .connect-box .btn-connect {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .connect-box .btn-connect:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .connect-box .error {
+            color: #dc3545;
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .connect-box .saved-servers {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .connect-box .saved-servers h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .server-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .server-item:hover { background: #e9ecef; }
+        .server-item .server-url { flex: 1; font-size: 13px; color: #333; }
+        .server-item .server-delete {
+            color: #dc3545;
+            padding: 5px;
+            cursor: pointer;
+        }
+
+        /* 主界面 */
+        .main-app { display: none; }
+        .main-app.active { display: block; }
+
+        /* 头部 */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .header h1 { font-size: 20px; }
+        .header-actions { display: flex; gap: 10px; }
+        .header-actions button {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .header-actions button:hover { background: rgba(255,255,255,0.3); }
+        .header-path {
+            background: rgba(255,255,255,0.15);
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        .current-path {
+            font-weight: 600;
+            font-size: 14px;
+            display: block;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+        .path-nav { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+        .path-nav a {
+            color: rgba(255,255,255,0.85);
+            text-decoration: none;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .path-nav a:hover { background: rgba(255,255,255,0.2); }
+        .path-nav .sep { color: rgba(255,255,255,0.5); }
+
+        /* 工具栏 */
+        .toolbar {
+            background: white;
+            padding: 15px 20px;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .toolbar-group {
+            flex: 1;
+            min-width: 250px;
+        }
+        .toolbar-group label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .toolbar-group code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #667eea;
+        }
+        .toolbar-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .toolbar input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        .toolbar input[type="file"] {
+            flex: 1;
+            font-size: 13px;
+        }
+        .toolbar button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+
+        /* 文件列表 */
+        .file-container {
+            margin: 0 20px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .file-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .file-table th, .file-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .file-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+        }
+        .file-table tr:hover { background: #f8f9fa; }
+        .file-table .name-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .file-table .icon { font-size: 18px; }
+        .file-table .name { color: #333; }
+        .file-table .name:hover { color: #667eea; }
+        .file-table .perms {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        .file-table .size, .file-table .time {
+            font-size: 13px;
+            color: #666;
+        }
+        .file-table .actions { white-space: nowrap; }
+        .file-table .actions button {
+            padding: 4px 10px;
+            margin: 0 2px;
+            font-size: 12px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-right: 3px;
+        }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-primary { background: #cce5ff; color: #004085; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+
+        /* 编辑器模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 18px; color: #333; }
+        .modal-header .close {
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+        .modal-body {
+            padding: 20px;
+            flex: 1;
+            overflow: auto;
+        }
+        .modal-body textarea {
+            width: 100%;
+            height: 400px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+        }
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* 消息提示 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        .toast.success { background: #28a745; }
+        .toast.error { background: #dc3545; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 加载中 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        /* 右键菜单 */
+        .context-menu {
+            display: none;
+            position: fixed;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            min-width: 150px;
+            z-index: 1000;
+            overflow: hidden;
+        }
+        .context-menu.active { display: block; }
+        .context-menu-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .context-menu-item:hover { background: #f0f2f5; }
+        .context-menu-divider {
+            height: 1px;
+            background: #eee;
+            margin: 5px 0;
+        }
+
+        @media (max-width: 768px) {
+            .toolbar { flex-direction: column; }
+            .toolbar-group { min-width: 100%; }
+            .header-top { flex-direction: column; gap: 10px; }
+            .file-table { font-size: 12px; }
+            .file-table th, .file-table td { padding: 8px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 连接面板 -->
+    <div class="connect-panel" id="connectPanel">
+        <div class="connect-box">
+            <h1>远程文件管理器</h1>
+            <div class="form-group">
+                <label>服务器地址</label>
+                <input type="text" id="serverUrl" placeholder="https://example.com/api.php">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="serverPassword" placeholder="输入密码">
+            </div>
+            <button class="btn-connect" onclick="connect()">连接</button>
+            <div class="error" id="connectError"></div>
+            <div class="saved-servers" id="savedServers"></div>
+        </div>
+    </div>
+
+    <!-- 主应用 -->
+    <div class="main-app" id="mainApp">
+        <div class="header">
+            <div class="header-top">
+                <h1>远程文件管理器</h1>
+                <div class="header-actions">
+                    <button onclick="showServerInfo()">服务器信息</button>
+                    <button onclick="disconnect()">断开连接</button>
+                </div>
+            </div>
+            <div class="header-path">
+                <span class="current-path" id="currentPath">/</span>
+                <div class="path-nav" id="pathNav"></div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-group">
+                <label>上传到: <code id="uploadPath"></code></label>
+                <div class="toolbar-row">
+                    <input type="file" id="uploadFile">
+                    <button class="btn-primary" onclick="uploadFile()">上传</button>
+                </div>
+            </div>
+            <div class="toolbar-group">
+                <label>创建到: <code id="createPath"></code></label>
+                <div class="toolbar-row">
+                    <input type="text" id="newName" placeholder="名称">
+                    <button class="btn-success" onclick="createDir()">创建目录</button>
+                    <button class="btn-primary" onclick="createFile()">创建文件</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="file-container">
+            <table class="file-table">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>大小</th>
+                        <th>权限</th>
+                        <th>修改时间</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="fileList"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 编辑器模态框 -->
+    <div class="modal" id="editorModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="editorTitle">编辑文件</h2>
+                <span class="close" onclick="closeEditor()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <textarea id="editorContent"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeEditor()">取消</button>
+                <button class="btn-success" onclick="saveFile()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="contextAction('open')">打开</div>
+        <div class="context-menu-item" onclick="contextAction('edit')">编辑</div>
+        <div class="context-menu-item" onclick="contextAction('download')">下载</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="contextAction('rename')">重命名</div>
+        <div class="context-menu-item" onclick="contextAction('info')">属性</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" style="color:#dc3545" onclick="contextAction('delete')">删除</div>
+    </div>
+
+    <script>
+        // 全局状态
+        let state = {
+            serverUrl: '',
+            password: '',
+            currentPath: '/',
+            selectedItem: null
+        };
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSavedServers();
+            document.addEventListener('click', () => hideContextMenu());
+        });
+
+        // 显示消息
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // API 请求
+        async function apiRequest(action, params = {}, method = 'GET') {
+            const url = new URL(state.serverUrl);
+
+            if (method === 'GET') {
+                url.searchParams.set('action', action);
+                Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+            }
+
+            const options = {
+                method,
+                headers: { 'X-Password': state.password }
+            };
+
+            if (method === 'POST') {
+                if (params instanceof FormData) {
+                    params.append('action', action);
+                    options.body = params;
+                } else {
+                    const formData = new FormData();
+                    formData.append('action', action);
+                    Object.keys(params).forEach(k => formData.append(k, params[k]));
+                    options.body = formData;
+                }
+            }
+
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                return { success: false, message: '网络错误: ' + error.message };
+            }
+        }
+
+        // 连接服务器
+        async function connect() {
+            const url = document.getElementById('serverUrl').value.trim();
+            const password = document.getElementById('serverPassword').value;
+            const errorEl = document.getElementById('connectError');
+
+            if (!url) {
+                errorEl.textContent = '请输入服务器地址';
+                return;
+            }
+
+            state.serverUrl = url;
+            state.password = password;
+
+            errorEl.textContent = '连接中...';
+
+            const result = await apiRequest('ping');
+
+            if (result.success) {
+                saveServer(url);
+                document.getElementById('connectPanel').classList.add('hidden');
+                document.getElementById('mainApp').classList.add('active');
+                loadDirectory('/');
+            } else {
+                errorEl.textContent = result.message || '连接失败';
+            }
+        }
+
+        // 断开连接
+        function disconnect() {
+            state.serverUrl = '';
+            state.password = '';
+            state.currentPath = '/';
+            document.getElementById('connectPanel').classList.remove('hidden');
+            document.getElementById('mainApp').classList.remove('active');
+            document.getElementById('serverPassword').value = '';
+        }
+
+        // 保存服务器
+        function saveServer(url) {
+            let servers = JSON.parse(localStorage.getItem('servers') || '[]');
+            if (!servers.includes(url)) {
+                servers.unshift(url);
+                servers = servers.slice(0, 10);
+                localStorage.setItem('servers', JSON.stringify(servers));
+            }
+            loadSavedServers();
+        }
+
+        // 加载保存的服务器
+        function loadSavedServers() {
+            const servers = JSON.parse(localStorage.getItem('servers') || '[]');
+            const container = document.getElementById('savedServers');
+
+            if (servers.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            container.innerHTML = '<h3>保存的服务器</h3>' + servers.map(url => `
+                <div class="server-item">
+                    <span class="server-url" onclick="selectServer('${url}')">${url}</span>
+                    <span class="server-delete" onclick="deleteServer('${url}')">&times;</span>
+                </div>
+            `).join('');
+        }
+
+        function selectServer(url) {
+            document.getElementById('serverUrl').value = url;
+        }
+
+        function deleteServer(url) {
+            event.stopPropagation();
+            let servers = JSON.parse(localStorage.getItem('servers') || '[]');
+            servers = servers.filter(s => s !== url);
+            localStorage.setItem('servers', JSON.stringify(servers));
+            loadSavedServers();
+        }
+
+        // 加载目录
+        async function loadDirectory(path) {
+            state.currentPath = path;
+            document.getElementById('currentPath').textContent = path;
+            document.getElementById('uploadPath').textContent = path + '/';
+            document.getElementById('createPath').textContent = path + '/';
+
+            updatePathNav(path);
+
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+
+            const result = await apiRequest('list', { path });
+
+            if (!result.success) {
+                fileList.innerHTML = `<tr><td colspan="6" class="loading" style="color:#dc3545">${result.message}</td></tr>`;
+                return;
+            }
+
+            fileList.innerHTML = result.data.items.map(item => `
+                <tr oncontextmenu="showContextMenu(event, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
+                    <td>
+                        <div class="name-cell" onclick="itemClick(${JSON.stringify(item).replace(/"/g, '&quot;')})">
+                            <span class="icon">${item.is_dir ? '📁' : '📄'}</span>
+                            <span class="name">${escapeHtml(item.name)}</span>
+                        </div>
+                    </td>
+                    <td class="size">${item.size_formatted}</td>
+                    <td class="perms">${item.perms}</td>
+                    <td class="time">${item.mtime ? formatTime(item.mtime) : '-'}</td>
+                    <td>
+                        ${item.readable ? '<span class="badge badge-success">可读</span>' : ''}
+                        ${item.writable ? '<span class="badge badge-primary">可写</span>' : ''}
+                        ${!item.readable && !item.writable ? '<span class="badge badge-danger">无权限</span>' : ''}
+                    </td>
+                    <td class="actions">
+                        ${!item.is_dir && item.name !== '..' ? `
+                            <button class="btn-secondary" onclick="viewFile('${escapeHtml(item.path)}')">查看</button>
+                            <button class="btn-primary" onclick="editFile('${escapeHtml(item.path)}')">编辑</button>
+                            <button class="btn-success" onclick="downloadFile('${escapeHtml(item.path)}')">下载</button>
+                        ` : ''}
+                        ${item.name !== '..' ? `
+                            <button class="btn-danger" onclick="deleteItem('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')">删除</button>
+                        ` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 更新路径导航
+        function updatePathNav(path) {
+            const parts = path.split('/').filter(p => p);
+            let buildPath = '';
+
+            let html = `<a onclick="loadDirectory('/')">Root /</a>`;
+
+            parts.forEach((part, i) => {
+                buildPath += '/' + part;
+                html += `<span class="sep">/</span><a onclick="loadDirectory('${buildPath}')">${escapeHtml(part)}</a>`;
+            });
+
+            document.getElementById('pathNav').innerHTML = html;
+        }
+
+        // 点击项目
+        function itemClick(item) {
+            if (item.is_dir) {
+                if (item.name === '..') {
+                    const parent = state.currentPath.split('/').slice(0, -1).join('/') || '/';
+                    loadDirectory(parent);
+                } else {
+                    loadDirectory(item.path);
+                }
+            } else {
+                viewFile(item.path);
+            }
+        }
+
+        // 查看文件
+        async function viewFile(path) {
+            const result = await apiRequest('read', { path });
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            document.getElementById('editorTitle').textContent = '查看: ' + path;
+            document.getElementById('editorContent').value = result.data.content;
+            document.getElementById('editorContent').readOnly = true;
+            document.getElementById('editorModal').classList.add('active');
+            state.editingPath = null;
+        }
+
+        // 编辑文件
+        async function editFile(path) {
+            const result = await apiRequest('read', { path });
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            document.getElementById('editorTitle').textContent = '编辑: ' + path;
+            document.getElementById('editorContent').value = result.data.content;
+            document.getElementById('editorContent').readOnly = false;
+            document.getElementById('editorModal').classList.add('active');
+            state.editingPath = path;
+        }
+
+        // 保存文件
+        async function saveFile() {
+            if (!state.editingPath) {
+                closeEditor();
+                return;
+            }
+
+            const content = document.getElementById('editorContent').value;
+            const result = await apiRequest('write', {
+                path: state.editingPath,
+                content: content
+            }, 'POST');
+
+            if (result.success) {
+                showToast('保存成功');
+                closeEditor();
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 关闭编辑器
+        function closeEditor() {
+            document.getElementById('editorModal').classList.remove('active');
+            state.editingPath = null;
+        }
+
+        // 下载文件
+        function downloadFile(path) {
+            const url = `${state.serverUrl}?action=download&path=${encodeURIComponent(path)}&password=${encodeURIComponent(state.password)}`;
+            window.open(url, '_blank');
+        }
+
+        // 上传文件
+        async function uploadFile() {
+            const fileInput = document.getElementById('uploadFile');
+            if (!fileInput.files.length) {
+                showToast('请选择文件', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('dir', state.currentPath);
+
+            const result = await apiRequest('upload', formData, 'POST');
+
+            if (result.success) {
+                showToast('上传成功');
+                fileInput.value = '';
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 创建目录
+        async function createDir() {
+            const name = document.getElementById('newName').value.trim();
+            if (!name) {
+                showToast('请输入名称', 'error');
+                return;
+            }
+
+            const path = state.currentPath + '/' + name;
+            const result = await apiRequest('mkdir', { path }, 'POST');
+
+            if (result.success) {
+                showToast('创建成功');
+                document.getElementById('newName').value = '';
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 创建文件
+        async function createFile() {
+            const name = document.getElementById('newName').value.trim();
+            if (!name) {
+                showToast('请输入名称', 'error');
+                return;
+            }
+
+            const path = state.currentPath + '/' + name;
+            const result = await apiRequest('write', { path, content: '' }, 'POST');
+
+            if (result.success) {
+                showToast('创建成功');
+                document.getElementById('newName').value = '';
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 删除项目
+        async function deleteItem(path, name) {
+            if (!confirm(`确定要删除 "${name}" 吗？`)) return;
+
+            const result = await apiRequest('delete', { path }, 'POST');
+
+            if (result.success) {
+                showToast('删除成功');
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 右键菜单
+        function showContextMenu(event, item) {
+            event.preventDefault();
+            state.selectedItem = item;
+
+            const menu = document.getElementById('contextMenu');
+            menu.style.left = event.pageX + 'px';
+            menu.style.top = event.pageY + 'px';
+            menu.classList.add('active');
+        }
+
+        function hideContextMenu() {
+            document.getElementById('contextMenu').classList.remove('active');
+        }
+
+        function contextAction(action) {
+            const item = state.selectedItem;
+            if (!item) return;
+
+            switch (action) {
+                case 'open':
+                    itemClick(item);
+                    break;
+                case 'edit':
+                    editFile(item.path);
+                    break;
+                case 'download':
+                    downloadFile(item.path);
+                    break;
+                case 'rename':
+                    const newName = prompt('新名称:', item.name);
+                    if (newName && newName !== item.name) {
+                        renameItem(item.path, state.currentPath + '/' + newName);
+                    }
+                    break;
+                case 'info':
+                    showItemInfo(item.path);
+                    break;
+                case 'delete':
+                    deleteItem(item.path, item.name);
+                    break;
+            }
+            hideContextMenu();
+        }
+
+        // 重命名
+        async function renameItem(oldPath, newPath) {
+            const result = await apiRequest('rename', {
+                old_path: oldPath,
+                new_path: newPath
+            }, 'POST');
+
+            if (result.success) {
+                showToast('重命名成功');
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 显示文件信息
+        async function showItemInfo(path) {
+            const result = await apiRequest('info', { path });
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            const info = result.data;
+            alert(`文件信息:
+路径: ${info.path}
+大小: ${info.size_formatted}
+权限: ${info.perms} (${info.perms_octal})
+修改时间: ${formatTime(info.mtime)}
+创建时间: ${formatTime(info.ctime)}
+访问时间: ${formatTime(info.atime)}
+所有者ID: ${info.owner}
+组ID: ${info.group}`);
+        }
+
+        // 服务器信息
+        async function showServerInfo() {
+            const result = await apiRequest('server');
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            const info = result.data;
+            alert(`服务器信息:
+PHP版本: ${info.php_version}
+服务器: ${info.server_software}
+文档根目录: ${info.document_root}
+API路径: ${info.script_path}
+上传限制: ${info.upload_max}
+POST限制: ${info.post_max}
+磁盘可用: ${info.disk_free}
+磁盘总量: ${info.disk_total}`);
+        }
+
+        // 工具函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeEditor();
+                hideContextMenu();
+            }
+        });
+    </script>
+</body>
+</html>
