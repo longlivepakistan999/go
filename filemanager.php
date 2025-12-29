@@ -46,15 +46,18 @@ function formatSize($bytes) {
 }
 
 // 格式化权限
-function formatPerms($perms) {
+function formatPerms($path) {
     $info = '';
 
     // 文件类型
-    if (is_link($perms)) $info = 'l';
-    elseif (is_dir($perms)) $info = 'd';
+    if (@is_link($path)) $info = 'l';
+    elseif (@is_dir($path)) $info = 'd';
     else $info = '-';
 
-    $perms = fileperms($perms);
+    $perms = @fileperms($path);
+    if ($perms === false) {
+        return $info . '?????????';
+    }
 
     // 所有者权限
     $info .= (($perms & 0x0100) ? 'r' : '-');
@@ -76,7 +79,11 @@ function formatPerms($perms) {
 
 // 获取权限的八进制表示
 function getOctalPerms($path) {
-    return substr(sprintf('%o', fileperms($path)), -4);
+    $perms = @fileperms($path);
+    if ($perms === false) {
+        return '????';
+    }
+    return substr(sprintf('%o', $perms), -4);
 }
 
 // 处理消息
@@ -261,13 +268,13 @@ if (is_dir($currentDir) && is_readable($currentDir)) {
         $items[] = [
             'name' => $item,
             'path' => $itemPath,
-            'is_dir' => is_dir($itemPath),
-            'size' => is_file($itemPath) ? filesize($itemPath) : 0,
+            'is_dir' => @is_dir($itemPath),
+            'size' => @is_file($itemPath) ? @filesize($itemPath) : 0,
             'perms' => formatPerms($itemPath),
             'octal' => getOctalPerms($itemPath),
-            'mtime' => filemtime($itemPath),
-            'readable' => is_readable($itemPath),
-            'writable' => is_writable($itemPath)
+            'mtime' => @filemtime($itemPath) ?: 0,
+            'readable' => @is_readable($itemPath),
+            'writable' => @is_writable($itemPath)
         ];
     }
 
