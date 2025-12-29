@@ -6,29 +6,32 @@
  */
 
 // 配置
-define('ROOT_PATH', __DIR__); // 根目录限制
+define('ROOT_PATH', '/'); // 允许浏览整个文件系统
+define('DEFAULT_PATH', __DIR__); // 默认起始目录
 define('MAX_UPLOAD_SIZE', 10 * 1024 * 1024); // 最大上传10MB
 
 // 安全函数：规范化路径，防止目录穿越
 function safePath($path) {
-    $path = str_replace(['../', '..\\', '..'], '', $path);
-    $realPath = realpath($path);
-    $rootReal = realpath(ROOT_PATH);
+    // 过滤目录穿越字符
+    $path = str_replace(['../', '..\\'], '', $path);
 
-    if ($realPath === false) {
-        return ROOT_PATH;
+    // 如果路径为空，返回默认路径
+    if (empty($path)) {
+        return DEFAULT_PATH;
     }
 
-    // 确保路径在根目录内
-    if (strpos($realPath, $rootReal) !== 0) {
-        return ROOT_PATH;
+    $realPath = realpath($path);
+
+    // 如果路径不存在，返回默认路径
+    if ($realPath === false) {
+        return DEFAULT_PATH;
     }
 
     return $realPath;
 }
 
 // 获取当前目录
-$currentDir = isset($_GET['dir']) ? $_GET['dir'] : ROOT_PATH;
+$currentDir = isset($_GET['dir']) ? $_GET['dir'] : DEFAULT_PATH;
 $currentDir = safePath($currentDir);
 
 // 格式化文件大小
@@ -844,7 +847,7 @@ $breadcrumbs = getBreadcrumbs($currentDir);
             <div class="header-top">
                 <h1>PHP 文件管理器</h1>
                 <div class="header-actions">
-                    <a href="?dir=<?php echo urlencode(ROOT_PATH); ?>">文件列表</a>
+                    <a href="?dir=<?php echo urlencode(DEFAULT_PATH); ?>">文件列表</a>
                     <a href="?serverinfo=1">服务器信息</a>
                 </div>
             </div>
