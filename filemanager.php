@@ -365,10 +365,6 @@ $breadcrumbs = getBreadcrumbs($currentDir);
             border-radius: 8px;
             font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
             font-size: 14px;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 4px;
         }
 
         .header-path .path-icon {
@@ -376,26 +372,38 @@ $breadcrumbs = getBreadcrumbs($currentDir);
             font-size: 16px;
         }
 
-        .header-path a {
-            color: #fff;
+        .header-path .current-path {
+            font-weight: 600;
+            font-size: 15px;
+            display: block;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+
+        .header-path .path-nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .header-path .path-nav a {
+            color: rgba(255,255,255,0.85);
             text-decoration: none;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 12px;
             transition: background 0.2s;
         }
 
-        .header-path a:hover {
-            background: rgba(255,255,255,0.2);
+        .header-path .path-nav a:hover {
+            background: rgba(255,255,255,0.25);
+            color: #fff;
         }
 
         .header-path .separator {
-            color: rgba(255,255,255,0.6);
-            margin: 0 2px;
-        }
-
-        .header-path .current {
-            background: rgba(255,255,255,0.25);
-            font-weight: 600;
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
         }
 
         .header-actions a {
@@ -861,14 +869,13 @@ $breadcrumbs = getBreadcrumbs($currentDir);
             <?php if (!$serverInfoMode): ?>
             <div class="header-path">
                 <span class="path-icon">📂</span>
-                <?php foreach ($breadcrumbs as $i => $crumb): ?>
-                    <?php if ($i > 0): ?><span class="separator">/</span><?php endif; ?>
-                    <?php if ($i === count($breadcrumbs) - 1): ?>
-                        <span class="current"><?php echo htmlspecialchars($crumb['name']); ?></span>
-                    <?php else: ?>
-                        <a href="?dir=<?php echo urlencode($crumb['path']); ?>"><?php echo htmlspecialchars($crumb['name']); ?></a>
-                    <?php endif; ?>
-                <?php endforeach; ?>
+                <span class="current-path"><?php echo htmlspecialchars($currentDir); ?></span>
+                <span class="path-nav">
+                    <?php foreach ($breadcrumbs as $i => $crumb): ?>
+                        <a href="?dir=<?php echo urlencode($crumb['path']); ?>" title="跳转到 <?php echo htmlspecialchars($crumb['path']); ?>"><?php echo htmlspecialchars($crumb['name']); ?></a>
+                        <?php if ($i < count($breadcrumbs) - 1): ?><span class="separator">/</span><?php endif; ?>
+                    <?php endforeach; ?>
+                </span>
             </div>
             <?php endif; ?>
         </div>
