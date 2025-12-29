@@ -281,28 +281,35 @@ if (is_dir($currentDir) && is_readable($currentDir)) {
 
 // 生成面包屑导航
 function getBreadcrumbs($path) {
-    $root = realpath(ROOT_PATH);
     $crumbs = [];
 
-    // 从当前路径向上遍历到根目录 /
-    $current = $path;
-    while ($current !== '/' && $current !== '') {
-        $crumbs[] = [
-            'name' => basename($current),
-            'path' => $current
-        ];
-        $parent = dirname($current);
-        if ($parent === $current) break; // 防止无限循环
-        $current = $parent;
+    // 确保路径是绝对路径
+    $path = realpath($path);
+    if ($path === false) {
+        $path = '/';
     }
 
-    // 添加根目录 /
+    // 将路径分割成各个部分
+    $parts = explode('/', trim($path, '/'));
+
+    // 添加根目录
     $crumbs[] = [
-        'name' => '/',
+        'name' => 'Root /',
         'path' => '/'
     ];
 
-    return array_reverse($crumbs);
+    // 逐级构建路径
+    $buildPath = '';
+    foreach ($parts as $part) {
+        if ($part === '') continue;
+        $buildPath .= '/' . $part;
+        $crumbs[] = [
+            'name' => $part,
+            'path' => $buildPath
+        ];
+    }
+
+    return $crumbs;
 }
 
 $breadcrumbs = getBreadcrumbs($currentDir);
