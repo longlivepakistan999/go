@@ -281,18 +281,22 @@ function getBreadcrumbs($path) {
     $root = realpath(ROOT_PATH);
     $crumbs = [];
 
+    // 从当前路径向上遍历到根目录 /
     $current = $path;
-    while ($current !== $root && strlen($current) >= strlen($root)) {
+    while ($current !== '/' && $current !== '') {
         $crumbs[] = [
             'name' => basename($current),
             'path' => $current
         ];
-        $current = dirname($current);
+        $parent = dirname($current);
+        if ($parent === $current) break; // 防止无限循环
+        $current = $parent;
     }
 
+    // 添加根目录 /
     $crumbs[] = [
-        'name' => 'ROOT',
-        'path' => $root
+        'name' => '/',
+        'path' => '/'
     ];
 
     return array_reverse($crumbs);
