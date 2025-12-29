@@ -21,22 +21,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // 响应函数
 function response($success, $data = null, $message = '') {
-    echo json_encode([
+    $result = array(
         'success' => $success,
         'data' => $data,
         'message' => $message
-    ], JSON_UNESCAPED_UNICODE);
+    );
+    echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+// 获取操作类型
+$action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
+
+// 如果没有提供action，返回API信息
+if (empty($action)) {
+    response(true, array(
+        'name' => 'Remote File Manager API',
+        'version' => '1.0',
+        'status' => 'ready'
+    ), 'API运行正常，请提供action参数');
 }
 
 // 验证密码
 function checkPassword($password, $correctPassword) {
-    if (empty($correctPassword)) return true;
+    if (empty($correctPassword) || $correctPassword === 'your_password_here') {
+        return true; // 未设置密码时允许访问
+    }
     return $password === $correctPassword;
 }
 
 // 获取密码
-$password = $_SERVER['HTTP_X_PASSWORD'] ?? $_POST['password'] ?? $_GET['password'] ?? '';
+$password = isset($_SERVER['HTTP_X_PASSWORD']) ? $_SERVER['HTTP_X_PASSWORD'] :
+            (isset($_POST['password']) ? $_POST['password'] :
+            (isset($_GET['password']) ? $_GET['password'] : ''));
 
 if (!checkPassword($password, $PASSWORD)) {
     http_response_code(401);
@@ -81,9 +98,6 @@ function getPermsString($path) {
 
     return $info;
 }
-
-// 获取操作类型
-$action = $_GET['action'] ?? $_POST['action'] ?? 'list';
 
 switch ($action) {
     // 列出目录
