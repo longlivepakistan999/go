@@ -530,6 +530,7 @@
         <div class="context-menu-item" onclick="contextAction('download')">下载</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="contextAction('rename')">重命名</div>
+        <div class="context-menu-item" onclick="contextAction('touch')">修改时间</div>
         <div class="context-menu-item" onclick="contextAction('info')">属性</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" style="color:#dc3545" onclick="contextAction('delete')">删除</div>
@@ -961,6 +962,9 @@
                         renameItem(item.path, state.currentPath + '/' + newName);
                     }
                     break;
+                case 'touch':
+                    touchFile(item.path, item.mtime);
+                    break;
                 case 'info':
                     showItemInfo(item.path);
                     break;
@@ -969,6 +973,32 @@
                     break;
             }
             hideContextMenu();
+        }
+
+        // 修改文件时间
+        async function touchFile(path, currentTime) {
+            // 格式化当前时间为 datetime-local 格式
+            const date = currentTime ? new Date(currentTime * 1000) : new Date();
+            const formatted = date.toISOString().slice(0, 16);
+
+            const newTime = prompt('修改时间 (格式: YYYY-MM-DDTHH:MM):', formatted);
+            if (!newTime) return;
+
+            // 解析输入的时间
+            const timestamp = Math.floor(new Date(newTime).getTime() / 1000);
+            if (isNaN(timestamp)) {
+                showToast('时间格式错误', 'error');
+                return;
+            }
+
+            const result = await apiRequest('touch', { path, time: timestamp }, 'POST');
+
+            if (result.success) {
+                showToast('修改时间成功');
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
         }
 
         // 重命名
