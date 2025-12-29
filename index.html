@@ -561,7 +561,7 @@
         }
 
         // API 请求
-        async function apiRequest(action, params = {}, method = 'GET', timeout = 10000) {
+        async function apiRequest(action, params = {}, method = 'GET', timeout = 600000) {
             const url = new URL(state.serverUrl);
 
             if (method === 'GET') {
