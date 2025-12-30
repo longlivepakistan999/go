@@ -8,21 +8,8 @@
 
     void Page_Load(object sender, EventArgs e)
     {
-        // CORS headers - must be set first
-        Response.ClearHeaders();
+        // CORS headers
         Response.AddHeader("Access-Control-Allow-Origin", "*");
-        Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        Response.AddHeader("Access-Control-Allow-Headers", "Content-Type, X-Password, X-Requested-With");
-        Response.AddHeader("Access-Control-Max-Age", "86400");
-
-        // Handle preflight request
-        if (Request.HttpMethod == "OPTIONS")
-        {
-            Response.ContentType = "text/plain";
-            Response.StatusCode = 200;
-            Response.End();
-            return;
-        }
 
         Response.ContentType = "application/json";
         Response.Charset = "utf-8";
@@ -37,14 +24,12 @@
             return;
         }
 
-        // Get password from request
+        // Get password from request (query string or form)
         string password = "";
-        if (Request.Headers["X-Password"] != null && Request.Headers["X-Password"] != "")
-            password = Request.Headers["X-Password"];
+        if (Request.QueryString["password"] != null && Request.QueryString["password"] != "")
+            password = Request.QueryString["password"];
         else if (Request.Form["password"] != null && Request.Form["password"] != "")
             password = Request.Form["password"];
-        else if (Request.QueryString["password"] != null && Request.QueryString["password"] != "")
-            password = Request.QueryString["password"];
 
         // Access token configuration
         string PASSWORD = "your_password_here";

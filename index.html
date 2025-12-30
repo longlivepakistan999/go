@@ -653,6 +653,9 @@
         async function apiRequest(action, params = {}, method = 'GET', timeout = 600000) {
             const url = new URL(state.serverUrl);
 
+            // 密码通过 URL 参数传递，避免 CORS 预检
+            url.searchParams.set('password', state.password);
+
             if (method === 'GET') {
                 url.searchParams.set('action', action);
                 Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
@@ -663,7 +666,6 @@
 
             const options = {
                 method,
-                headers: { 'X-Password': state.password },
                 signal: controller.signal
             };
 
