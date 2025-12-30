@@ -1,6 +1,7 @@
 <%
 Response.Buffer = True
 Response.ContentType = "application/json"
+Response.AddHeader "Access-Control-Allow-Origin", "*"
 
 Dim fso, action, pw
 Set fso = Server.CreateObject("Scripting.FileSystemObject")
