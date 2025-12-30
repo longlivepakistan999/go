@@ -88,6 +88,10 @@
                     break;
             }
         }
+        catch (System.Threading.ThreadAbortException)
+        {
+            // Response.End() throws this, ignore it
+        }
         catch (Exception ex)
         {
             SendResponse(false, null, ex.Message);
