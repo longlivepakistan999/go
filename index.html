@@ -656,8 +656,18 @@
             url.searchParams.set('action', action);
             url.searchParams.set('password', state.password);
 
-            if (method === 'GET') {
-                Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+            // 检查是否为文件上传（params是FormData且包含file字段）
+            const isFileUpload = params instanceof FormData && params.has('file');
+
+            // 非文件上传的参数全部放到URL中（兼容Classic ASP）
+            if (!isFileUpload) {
+                if (params instanceof FormData) {
+                    for (const [key, value] of params.entries()) {
+                        url.searchParams.set(key, value);
+                    }
+                } else {
+                    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+                }
             }
 
             const controller = new AbortController();
@@ -668,14 +678,9 @@
                 signal: controller.signal
             };
 
-            if (method === 'POST') {
-                if (params instanceof FormData) {
-                    options.body = params;
-                } else {
-                    const formData = new FormData();
-                    Object.keys(params).forEach(k => formData.append(k, params[k]));
-                    options.body = formData;
-                }
+            // 只有文件上传才使用FormData body
+            if (method === 'POST' && isFileUpload) {
+                options.body = params;
             }
 
             try {
