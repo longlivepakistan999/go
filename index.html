@@ -172,23 +172,22 @@
             font-family: monospace;
         }
         .current-path {
-            font-weight: 600;
-            font-size: 14px;
-            display: block;
-            margin-bottom: 8px;
-            word-break: break-all;
+            display: none;
         }
-        .path-nav { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+        .path-nav { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
         .path-nav a {
-            color: rgba(255,255,255,0.85);
+            color: #fff;
             text-decoration: none;
-            padding: 3px 8px;
+            padding: 4px 10px;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            transition: background 0.2s;
         }
-        .path-nav a:hover { background: rgba(255,255,255,0.2); }
-        .path-nav .sep { color: rgba(255,255,255,0.5); }
+        .path-nav a:hover { background: rgba(255,255,255,0.25); }
+        .path-nav .sep { color: rgba(255,255,255,0.6); font-size: 14px; margin: 0 2px; }
 
         /* 工具栏 */
         .toolbar {
@@ -849,14 +848,27 @@
 
         // 更新路径导航
         function updatePathNav(path) {
-            const parts = path.split('/').filter(p => p);
+            // Handle both Windows (\) and Unix (/) paths
+            const isWindows = path.includes('\\') || /^[A-Za-z]:/.test(path);
+            const sep = isWindows ? '\\' : '/';
+            const parts = path.split(/[\\\/]/).filter(p => p);
+
+            let html = '';
             let buildPath = '';
 
-            let html = `<a onclick="loadDirectory('/')">Root /</a>`;
+            if (isWindows && parts.length > 0 && /^[A-Za-z]:$/.test(parts[0])) {
+                // Windows drive letter (e.g., C:)
+                buildPath = parts[0] + '\\';
+                html += `<a href="javascript:void(0)" onclick="loadDirectory('${buildPath.replace(/\\/g, '\\\\')}')">${escapeHtml(parts[0])}</a>`;
+                parts.shift();
+            } else {
+                html += `<a href="javascript:void(0)" onclick="loadDirectory('/')">Root</a>`;
+            }
 
             parts.forEach((part, i) => {
-                buildPath += '/' + part;
-                html += `<span class="sep">/</span><a onclick="loadDirectory('${buildPath}')">${escapeHtml(part)}</a>`;
+                buildPath += (buildPath.endsWith('\\') || buildPath.endsWith('/') || buildPath === '') ? part : sep + part;
+                const escapedPath = buildPath.replace(/\\/g, '\\\\');
+                html += `<span class="sep">${sep}</span><a href="javascript:void(0)" onclick="loadDirectory('${escapedPath}')">${escapeHtml(part)}</a>`;
             });
 
             document.getElementById('pathNav').innerHTML = html;
