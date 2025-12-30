@@ -1,412 +1,301 @@
 <%@ Language="VBScript" CodePage="65001" %>
-<% On Error Resume Next %>
 <%
-' Remote File Manager API - Classic ASP Version
-
-Option Explicit
 Response.Buffer = True
 Response.ContentType = "application/json"
 Response.Charset = "utf-8"
 
-Dim fso, action, password, PASSWORD
-
+Dim fso
 Set fso = Server.CreateObject("Scripting.FileSystemObject")
 
-action = GetParam("action", "")
+Dim action, password, PASSWORD, path
 
-' Return blank if no action provided
-If action = "" Then
-    Response.End
-End If
+action = GetParam("action")
+password = GetParam("password")
 
-' Get password from request
-password = ""
-If Request.ServerVariables("HTTP_X_PASSWORD") <> "" Then
-    password = Request.ServerVariables("HTTP_X_PASSWORD")
-ElseIf Request.Form("password") <> "" Then
-    password = Request.Form("password")
-ElseIf Request.QueryString("password") <> "" Then
-    password = Request.QueryString("password")
-End If
-
-' Access token configuration
+' Password config (line ~15)
 PASSWORD = "your_password_here"
 
-' Verify access token
 If PASSWORD <> "" And PASSWORD <> "your_password_here" Then
     If password <> PASSWORD Then
-        Response.Status = "401 Unauthorized"
         Response.Write "{""success"":false,""data"":null,""message"":""Unauthorized""}"
         Response.End
     End If
 End If
 
-' Route actions
 Select Case action
     Case "list"
-        Call ListDirectory()
+        DoList
     Case "read"
-        Call ReadFile()
+        DoRead
     Case "write"
-        Call WriteFile()
+        DoWrite
     Case "mkdir"
-        Call CreateDirectory()
+        DoMkdir
     Case "delete"
-        Call DeleteItem()
+        DoDelete
     Case "rename"
-        Call RenameItem()
+        DoRename
     Case "download"
-        Call DownloadFile()
+        DoDownload
     Case "touch"
-        Call TouchFile()
+        DoTouch
     Case "info"
-        Call GetFileInfo()
+        DoInfo
     Case "server"
-        Call GetServerInfo()
+        DoServer
     Case Else
-        Call SendResponse(False, "", "Unknown action")
+        Response.Write "{""success"":false,""data"":null,""message"":""Unknown action""}"
 End Select
 
 Set fso = Nothing
 
-' ========== Helper Functions ==========
-
-Function GetParam(key, defaultValue)
+Public Function GetParam(key)
+    GetParam = ""
     If Request.QueryString(key) <> "" Then
         GetParam = Request.QueryString(key)
     ElseIf Request.Form(key) <> "" Then
         GetParam = Request.Form(key)
-    Else
-        GetParam = defaultValue
     End If
 End Function
 
-Function GetDefaultDir()
-    GetDefaultDir = fso.GetParentFolderName(Request.ServerVariables("PATH_TRANSLATED"))
-End Function
-
-Function SafePath(path)
-    path = Replace(path, "../", "")
-    path = Replace(path, "..\", "")
-
-    If path = "" Or path = "/" Then
-        SafePath = GetDefaultDir()
+Public Function SafePath(p)
+    If p = "" Or p = "/" Then
+        SafePath = fso.GetParentFolderName(Request.ServerVariables("PATH_TRANSLATED"))
     Else
-        SafePath = path
+        p = Replace(p, "../", "")
+        p = Replace(p, "..\", "")
+        SafePath = p
     End If
 End Function
 
-Sub SendResponse(success, data, message)
-    Dim json
-    json = "{""success"":" & LCase(CStr(success)) & ","
-    json = json & """data"":" & data & ","
-    json = json & """message"":""" & EscapeJson(message) & """}"
-    Response.Write json
-    Response.End
-End Sub
-
-Function EscapeJson(str)
-    str = Replace(str, "\", "\\")
-    str = Replace(str, """", "\""")
-    str = Replace(str, Chr(10), "\n")
-    str = Replace(str, Chr(13), "\r")
-    str = Replace(str, Chr(9), "\t")
-    EscapeJson = str
+Public Function EscapeJson(s)
+    If IsNull(s) Then s = ""
+    s = Replace(s, "\", "\\")
+    s = Replace(s, """", "\""")
+    s = Replace(s, Chr(10), "\n")
+    s = Replace(s, Chr(13), "\r")
+    s = Replace(s, Chr(9), "\t")
+    EscapeJson = s
 End Function
 
-Function FormatSize(bytes)
+Public Function FormatSize(bytes)
     Dim units, i, size
     units = Array("B", "KB", "MB", "GB", "TB")
-
     If bytes = 0 Then
         FormatSize = "0 B"
         Exit Function
     End If
-
     size = CDbl(bytes)
     i = 0
     Do While size >= 1024 And i < 4
         size = size / 1024
         i = i + 1
     Loop
-
     FormatSize = Round(size, 2) & " " & units(i)
 End Function
 
-Function DateToTimestamp(dt)
+Public Function ToTimestamp(dt)
     On Error Resume Next
-    Dim d1970
-    d1970 = DateSerial(1970, 1, 1)
-    DateToTimestamp = DateDiff("s", d1970, dt)
-    If Err.Number <> 0 Then DateToTimestamp = 0
+    ToTimestamp = DateDiff("s", DateSerial(1970, 1, 1), dt)
+    If Err.Number <> 0 Then ToTimestamp = 0
     On Error GoTo 0
 End Function
 
-' ========== Action Handlers ==========
+Public Sub DoList()
+    Dim p, folder, subfolder, file, items
+    p = SafePath(GetParam("path"))
 
-Sub ListDirectory()
-    Dim path, folder, subfolder, file, items, itemJson
-    path = SafePath(GetParam("path", "/"))
-
-    If Not fso.FolderExists(path) Then
-        Call SendResponse(False, "null", "Not a valid directory")
+    If Not fso.FolderExists(p) Then
+        Response.Write "{""success"":false,""data"":null,""message"":""Directory not found""}"
         Exit Sub
     End If
 
-    Set folder = fso.GetFolder(path)
+    Set folder = fso.GetFolder(p)
     items = "["
 
-    ' Add parent directory
-    If fso.GetParentFolderName(path) <> "" Then
-        items = items & "{""name"":"".."",""path"":""" & EscapeJson(fso.GetParentFolderName(path)) & ""","
-        items = items & """is_dir"":true,""size"":0,""size_formatted"":""-"","
-        items = items & """mtime"":0,""perms"":""drwxr-xr-x"",""readable"":true,""writable"":true}"
+    If fso.GetParentFolderName(p) <> "" Then
+        items = items & "{""name"":"".."",""path"":""" & EscapeJson(fso.GetParentFolderName(p)) & """,""is_dir"":true,""size"":0,""size_formatted"":""-"",""mtime"":0,""perms"":""drwxr-xr-x"",""readable"":true,""writable"":true}"
     End If
 
-    ' Add subdirectories
     For Each subfolder In folder.SubFolders
         If items <> "[" Then items = items & ","
-        items = items & "{""name"":""" & EscapeJson(subfolder.Name) & ""","
-        items = items & """path"":""" & EscapeJson(subfolder.Path) & ""","
-        items = items & """is_dir"":true,""size"":0,""size_formatted"":""-"","
-        items = items & """mtime"":" & DateToTimestamp(subfolder.DateLastModified) & ","
-        items = items & """perms"":""drwxr-xr-x"",""readable"":true,""writable"":true}"
+        items = items & "{""name"":""" & EscapeJson(subfolder.Name) & """,""path"":""" & EscapeJson(subfolder.Path) & """,""is_dir"":true,""size"":0,""size_formatted"":""-"",""mtime"":" & ToTimestamp(subfolder.DateLastModified) & ",""perms"":""drwxr-xr-x"",""readable"":true,""writable"":true}"
     Next
 
-    ' Add files
     For Each file In folder.Files
         If items <> "[" Then items = items & ","
-        items = items & "{""name"":""" & EscapeJson(file.Name) & ""","
-        items = items & """path"":""" & EscapeJson(file.Path) & ""","
-        items = items & """is_dir"":false,""size"":" & file.Size & ","
-        items = items & """size_formatted"":""" & FormatSize(file.Size) & ""","
-        items = items & """mtime"":" & DateToTimestamp(file.DateLastModified) & ","
-        items = items & """perms"":""-rwxr-xr-x"",""readable"":true,""writable"":true}"
+        items = items & "{""name"":""" & EscapeJson(file.Name) & """,""path"":""" & EscapeJson(file.Path) & """,""is_dir"":false,""size"":" & file.Size & ",""size_formatted"":""" & FormatSize(file.Size) & """,""mtime"":" & ToTimestamp(file.DateLastModified) & ",""perms"":""-rwxr-xr-x"",""readable"":true,""writable"":true}"
     Next
 
     items = items & "]"
-
     Set folder = Nothing
 
-    Dim data
-    data = "{""path"":""" & EscapeJson(path) & """,""items"":" & items & "}"
-    Call SendResponse(True, data, "")
+    Response.Write "{""success"":true,""data"":{""path"":""" & EscapeJson(p) & """,""items"":" & items & "},""message"":""""}"
 End Sub
 
-Sub ReadFile()
-    Dim path, ts, content
-    path = SafePath(GetParam("path", ""))
+Public Sub DoRead()
+    Dim p, ts, content
+    p = SafePath(GetParam("path"))
 
-    If Not fso.FileExists(path) Then
-        Call SendResponse(False, "null", "File does not exist")
+    If Not fso.FileExists(p) Then
+        Response.Write "{""success"":false,""data"":null,""message"":""File not found""}"
         Exit Sub
     End If
 
     On Error Resume Next
-    Set ts = fso.OpenTextFile(path, 1, False, -1)
-    If Err.Number <> 0 Then
-        Call SendResponse(False, "null", "Read failed")
-        Exit Sub
-    End If
-
+    Set ts = fso.OpenTextFile(p, 1, False, -1)
     content = ts.ReadAll()
     ts.Close
     Set ts = Nothing
     On Error GoTo 0
 
-    Dim data
-    data = "{""path"":""" & EscapeJson(path) & """,""content"":""" & EscapeJson(content) & """,""size"":" & Len(content) & "}"
-    Call SendResponse(True, data, "")
+    Response.Write "{""success"":true,""data"":{""path"":""" & EscapeJson(p) & """,""content"":""" & EscapeJson(content) & """,""size"":" & Len(content) & "},""message"":""""}"
 End Sub
 
-Sub WriteFile()
-    Dim path, content, ts
-    path = GetParam("path", "")
+Public Sub DoWrite()
+    Dim p, content, ts
+    p = GetParam("path")
     content = Request.Form("content")
 
-    If path = "" Then
-        Call SendResponse(False, "null", "Path cannot be empty")
+    If p = "" Then
+        Response.Write "{""success"":false,""data"":null,""message"":""Path empty""}"
         Exit Sub
     End If
 
     On Error Resume Next
-    Set ts = fso.CreateTextFile(path, True, True)
-    If Err.Number <> 0 Then
-        Call SendResponse(False, "null", "Write failed")
-        Exit Sub
-    End If
-
+    Set ts = fso.CreateTextFile(p, True, True)
     ts.Write content
     ts.Close
     Set ts = Nothing
     On Error GoTo 0
 
-    Dim data
-    data = "{""bytes"":" & Len(content) & "}"
-    Call SendResponse(True, data, "Saved successfully")
+    Response.Write "{""success"":true,""data"":{""bytes"":" & Len(content) & "},""message"":""Saved""}"
 End Sub
 
-Sub CreateDirectory()
-    Dim path
-    path = GetParam("path", "")
+Public Sub DoMkdir()
+    Dim p
+    p = GetParam("path")
 
-    If path = "" Then
-        Call SendResponse(False, "null", "Path cannot be empty")
+    If p = "" Then
+        Response.Write "{""success"":false,""data"":null,""message"":""Path empty""}"
         Exit Sub
     End If
 
-    If fso.FolderExists(path) Then
-        Call SendResponse(False, "null", "Directory already exists")
+    If fso.FolderExists(p) Then
+        Response.Write "{""success"":false,""data"":null,""message"":""Already exists""}"
         Exit Sub
     End If
 
     On Error Resume Next
-    fso.CreateFolder(path)
-    If Err.Number <> 0 Then
-        Call SendResponse(False, "null", "Create failed")
-        Exit Sub
-    End If
+    fso.CreateFolder(p)
     On Error GoTo 0
 
-    Call SendResponse(True, "null", "Created successfully")
+    Response.Write "{""success"":true,""data"":null,""message"":""Created""}"
 End Sub
 
-Sub DeleteItem()
-    Dim path
-    path = SafePath(GetParam("path", ""))
-
-    If path = "" Then
-        Call SendResponse(False, "null", "Path cannot be empty")
-        Exit Sub
-    End If
+Public Sub DoDelete()
+    Dim p
+    p = SafePath(GetParam("path"))
 
     On Error Resume Next
-    If fso.FolderExists(path) Then
-        fso.DeleteFolder path, True
-    ElseIf fso.FileExists(path) Then
-        fso.DeleteFile path, True
+    If fso.FolderExists(p) Then
+        fso.DeleteFolder p, True
+    ElseIf fso.FileExists(p) Then
+        fso.DeleteFile p, True
     Else
-        Call SendResponse(False, "null", "File does not exist")
-        Exit Sub
-    End If
-
-    If Err.Number <> 0 Then
-        Call SendResponse(False, "null", "Delete failed")
+        Response.Write "{""success"":false,""data"":null,""message"":""Not found""}"
         Exit Sub
     End If
     On Error GoTo 0
 
-    Call SendResponse(True, "null", "Deleted successfully")
+    Response.Write "{""success"":true,""data"":null,""message"":""Deleted""}"
 End Sub
 
-Sub RenameItem()
-    Dim oldPath, newPath
-    oldPath = SafePath(GetParam("old_path", ""))
-    newPath = GetParam("new_path", "")
+Public Sub DoRename()
+    Dim oldP, newP
+    oldP = SafePath(GetParam("old_path"))
+    newP = GetParam("new_path")
 
-    If oldPath = "" Or newPath = "" Then
-        Call SendResponse(False, "null", "Path cannot be empty")
+    If newP = "" Then
+        Response.Write "{""success"":false,""data"":null,""message"":""New path empty""}"
         Exit Sub
     End If
 
     On Error Resume Next
-    If fso.FolderExists(oldPath) Then
-        fso.MoveFolder oldPath, newPath
-    ElseIf fso.FileExists(oldPath) Then
-        fso.MoveFile oldPath, newPath
+    If fso.FolderExists(oldP) Then
+        fso.MoveFolder oldP, newP
+    ElseIf fso.FileExists(oldP) Then
+        fso.MoveFile oldP, newP
     Else
-        Call SendResponse(False, "null", "File does not exist")
-        Exit Sub
-    End If
-
-    If Err.Number <> 0 Then
-        Call SendResponse(False, "null", "Rename failed")
+        Response.Write "{""success"":false,""data"":null,""message"":""Not found""}"
         Exit Sub
     End If
     On Error GoTo 0
 
-    Call SendResponse(True, "null", "Renamed successfully")
+    Response.Write "{""success"":true,""data"":null,""message"":""Renamed""}"
 End Sub
 
-Sub DownloadFile()
-    Dim path, stream
-    path = SafePath(GetParam("path", ""))
+Public Sub DoDownload()
+    Dim p, stream
+    p = SafePath(GetParam("path"))
 
-    If Not fso.FileExists(path) Then
+    If Not fso.FileExists(p) Then
         Response.Status = "404 Not Found"
-        Response.Write "File not found"
+        Response.Write "Not found"
         Response.End
     End If
 
     Response.Clear
     Response.ContentType = "application/octet-stream"
-    Response.AddHeader "Content-Disposition", "attachment; filename=""" & fso.GetFileName(path) & """"
+    Response.AddHeader "Content-Disposition", "attachment; filename=""" & fso.GetFileName(p) & """"
 
     Set stream = Server.CreateObject("ADODB.Stream")
     stream.Type = 1
     stream.Open
-    stream.LoadFromFile path
+    stream.LoadFromFile p
     Response.BinaryWrite stream.Read
     stream.Close
     Set stream = Nothing
-
     Response.End
 End Sub
 
-Sub TouchFile()
-    ' Note: Classic ASP cannot modify file timestamps directly
-    ' This would require shell execution which we avoid for security
-    Call SendResponse(False, "null", "Touch not supported in classic ASP")
+Public Sub DoTouch()
+    Response.Write "{""success"":false,""data"":null,""message"":""Touch not supported in Classic ASP""}"
 End Sub
 
-Sub GetFileInfo()
-    Dim path, file, folder, isDir, size, mtime, ctime
-    path = SafePath(GetParam("path", ""))
-
+Public Sub DoInfo()
+    Dim p, f, isDir, size, mtime, ctime
+    p = SafePath(GetParam("path"))
     isDir = False
     size = 0
     mtime = 0
     ctime = 0
 
-    If fso.FolderExists(path) Then
+    If fso.FolderExists(p) Then
         isDir = True
-        Set folder = fso.GetFolder(path)
-        mtime = DateToTimestamp(folder.DateLastModified)
-        ctime = DateToTimestamp(folder.DateCreated)
-        Set folder = Nothing
-    ElseIf fso.FileExists(path) Then
-        Set file = fso.GetFile(path)
-        size = file.Size
-        mtime = DateToTimestamp(file.DateLastModified)
-        ctime = DateToTimestamp(file.DateCreated)
-        Set file = Nothing
+        Set f = fso.GetFolder(p)
+        mtime = ToTimestamp(f.DateLastModified)
+        ctime = ToTimestamp(f.DateCreated)
+        Set f = Nothing
+    ElseIf fso.FileExists(p) Then
+        Set f = fso.GetFile(p)
+        size = f.Size
+        mtime = ToTimestamp(f.DateLastModified)
+        ctime = ToTimestamp(f.DateCreated)
+        Set f = Nothing
     Else
-        Call SendResponse(False, "null", "File does not exist")
+        Response.Write "{""success"":false,""data"":null,""message"":""Not found""}"
         Exit Sub
     End If
 
-    Dim data
-    data = "{""path"":""" & EscapeJson(path) & ""","
-    data = data & """name"":""" & EscapeJson(fso.GetFileName(path)) & ""","
-    data = data & """is_dir"":" & LCase(CStr(isDir)) & ","
-    data = data & """size"":" & size & ","
-    data = data & """size_formatted"":""" & FormatSize(size) & ""","
-    data = data & """mtime"":" & mtime & ","
-    data = data & """ctime"":" & ctime & ","
-    data = data & """atime"":" & mtime & ","
-    data = data & """perms"":""-rwxr-xr-x"","
-    data = data & """perms_octal"":""0755"","
-    data = data & """readable"":true,""writable"":true,"
-    data = data & """owner"":0,""group"":0}"
-
-    Call SendResponse(True, data, "")
+    Response.Write "{""success"":true,""data"":{""path"":""" & EscapeJson(p) & """,""name"":""" & EscapeJson(fso.GetFileName(p)) & """,""is_dir"":" & LCase(CStr(isDir)) & ",""size"":" & size & ",""size_formatted"":""" & FormatSize(size) & """,""mtime"":" & mtime & ",""ctime"":" & ctime & ",""atime"":" & mtime & ",""perms"":""-rwxr-xr-x"",""perms_octal"":""0755"",""readable"":true,""writable"":true,""owner"":0,""group"":0},""message"":""""}"
 End Sub
 
-Sub GetServerInfo()
+Public Sub DoServer()
     Dim drive, diskFree, diskTotal, currentUser
-
     diskFree = 0
     diskTotal = 0
+
     On Error Resume Next
     Set drive = fso.GetDrive(fso.GetDriveName(Request.ServerVariables("PATH_TRANSLATED")))
     If Err.Number = 0 Then
@@ -416,21 +305,9 @@ Sub GetServerInfo()
     End If
     On Error GoTo 0
 
-    currentUser = Request.ServerVariables("AUTH_USER")
-    If currentUser = "" Then currentUser = Request.ServerVariables("LOGON_USER")
+    currentUser = Request.ServerVariables("LOGON_USER")
     If currentUser = "" Then currentUser = "Anonymous"
 
-    Dim data
-    data = "{""php_version"":""ASP Classic"","
-    data = data & """server_software"":""" & EscapeJson(Request.ServerVariables("SERVER_SOFTWARE")) & ""","
-    data = data & """document_root"":""" & EscapeJson(Request.ServerVariables("APPL_PHYSICAL_PATH")) & ""","
-    data = data & """script_path"":""" & EscapeJson(Request.ServerVariables("PATH_TRANSLATED")) & ""","
-    data = data & """upload_max"":""N/A"","
-    data = data & """post_max"":""N/A"","
-    data = data & """disk_free"":""" & FormatSize(diskFree) & ""","
-    data = data & """disk_total"":""" & FormatSize(diskTotal) & ""","
-    data = data & """current_user"":""" & EscapeJson(currentUser) & """}"
-
-    Call SendResponse(True, data, "")
+    Response.Write "{""success"":true,""data"":{""php_version"":""ASP Classic"",""server_software"":""" & EscapeJson(Request.ServerVariables("SERVER_SOFTWARE")) & """,""document_root"":""" & EscapeJson(Request.ServerVariables("APPL_PHYSICAL_PATH")) & """,""script_path"":""" & EscapeJson(Request.ServerVariables("PATH_TRANSLATED")) & """,""upload_max"":""N/A"",""post_max"":""N/A"",""disk_free"":""" & FormatSize(diskFree) & """,""disk_total"":""" & FormatSize(diskTotal) & """,""current_user"":""" & EscapeJson(currentUser) & """},""message"":""""}"
 End Sub
 %>
