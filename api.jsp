@@ -3,6 +3,12 @@ response.setHeader("Access-Control-Allow-Origin", "*");
 response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 response.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+// Handle OPTIONS preflight request
+if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+    response.setStatus(200);
+    return;
+}
+
 String action = request.getParameter("action");
 String password = request.getParameter("password");
 
