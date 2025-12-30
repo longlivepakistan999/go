@@ -20,7 +20,8 @@
         // Return blank if no action provided
         if (action == "")
         {
-            Response.End();
+            Response.Flush();
+            HttpContext.Current.ApplicationInstance.CompleteRequest();
             return;
         }
 
@@ -41,7 +42,8 @@
             {
                 Response.StatusCode = 401;
                 Response.Write("{null}");
-                Response.End();
+                Response.Flush();
+                HttpContext.Current.ApplicationInstance.CompleteRequest();
                 return;
             }
         }
@@ -88,10 +90,6 @@
                     break;
             }
         }
-        catch (System.Threading.ThreadAbortException)
-        {
-            // Response.End() throws this, ignore it
-        }
         catch (Exception ex)
         {
             SendResponse(false, null, ex.Message);
@@ -130,15 +128,21 @@
         }
     }
 
+    bool responseSent = false;
+
     void SendResponse(bool success, object data, string message)
     {
+        if (responseSent) return;
+        responseSent = true;
+
         Dictionary<string, object> result = new Dictionary<string, object>();
         result.Add("success", success);
         result.Add("data", data);
         result.Add("message", message);
         JavaScriptSerializer serializer = new JavaScriptSerializer();
         Response.Write(serializer.Serialize(result));
-        Response.End();
+        Response.Flush();
+        HttpContext.Current.ApplicationInstance.CompleteRequest();
     }
 
     string FormatSize(long bytes)
@@ -432,7 +436,8 @@
         {
             Response.StatusCode = 404;
             Response.Write("File not found");
-            Response.End();
+            Response.Flush();
+            HttpContext.Current.ApplicationInstance.CompleteRequest();
             return;
         }
 
@@ -440,7 +445,8 @@
         Response.ContentType = "application/octet-stream";
         Response.AddHeader("Content-Disposition", "attachment; filename=\"" + Path.GetFileName(path) + "\"");
         Response.TransmitFile(path);
-        Response.End();
+        Response.Flush();
+        HttpContext.Current.ApplicationInstance.CompleteRequest();
     }
 
     void TouchFile()
