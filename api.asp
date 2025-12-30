@@ -10,13 +10,19 @@ Set fso = Server.CreateObject("Scripting.FileSystemObject")
 action = Request("action")
 pw = Request("password")
 
+' No action = blank page
+If action = "" Then
+    Response.ContentType = "text/html"
+    Response.End
+End If
+
 ' Password (change here)
 Dim PASSWORD
 PASSWORD = ""
 
 If PASSWORD <> "" Then
     If pw <> PASSWORD Then
-        Response.Write "{""success"":false,""message"":""Unauthorized""}"
+        Response.Write "null"
         Response.End
     End If
 End If
