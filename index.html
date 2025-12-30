@@ -866,24 +866,24 @@
             const parts = path.split(/[\\\/]/).filter(p => p);
 
             let html = '';
-            let buildPath = '';
+            let currentPath = '';
 
             if (isWindows && parts.length > 0 && /^[A-Za-z]:$/.test(parts[0])) {
                 // Windows drive letter (e.g., C:)
-                buildPath = parts[0] + '\\';
-                html += `<a href="javascript:void(0)" onclick="loadDirectory('${buildPath.replace(/\\/g, '\\\\')}')">${escapeHtml(parts[0])}</a>`;
-                parts.shift();
+                currentPath = parts[0] + '\\';
+                html += `<a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[0])}</a>`;
+                for (let i = 1; i < parts.length; i++) {
+                    currentPath += parts[i] + (i < parts.length - 1 ? '\\' : '');
+                    html += `<span class="sep">\\</span><a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[i])}</a>`;
+                }
             } else {
-                // Unix path - start with /
-                buildPath = '';
+                // Unix path
                 html += `<a href="javascript:void(0)" onclick="loadDirectory('/')">Root</a>`;
+                for (let i = 0; i < parts.length; i++) {
+                    currentPath += '/' + parts[i];
+                    html += `<span class="sep">/</span><a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[i])}</a>`;
+                }
             }
-
-            parts.forEach((part, i) => {
-                buildPath += '/' + part;
-                const escapedPath = buildPath.replace(/\\/g, '\\\\');
-                html += `<span class="sep">${sep}</span><a href="javascript:void(0)" onclick="loadDirectory('${escapedPath}')">${escapeHtml(part)}</a>`;
-            });
 
             document.getElementById('pathNav').innerHTML = html;
         }
