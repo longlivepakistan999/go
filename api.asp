@@ -88,10 +88,12 @@ ElseIf action = "write" Then
     End If
 
 ElseIf action = "mkdir" Then
-    Dim mPath
-    mPath = Request("path")
-    mPath = Replace(mPath, "/", "\")
-    If Left(mPath, 1) = "\" Then mPath = Mid(mPath, 2)
+    Dim mPath, mRaw
+    mRaw = Request("path")
+    mPath = Replace(mRaw, "/", "\")
+    Do While Left(mPath, 1) = "\"
+        mPath = Mid(mPath, 2)
+    Loop
     If mPath <> "" Then
         If Not fso.FolderExists(mPath) Then
             fso.CreateFolder mPath
@@ -100,7 +102,7 @@ ElseIf action = "mkdir" Then
             Response.Write "{""success"":false,""message"":""Already exists""}"
         End If
     Else
-        Response.Write "{""success"":false,""message"":""Path empty""}"
+        Response.Write "{""success"":false,""message"":""Path empty. Raw=[" & mRaw & "]""}"
     End If
 
 ElseIf action = "upload" Then
