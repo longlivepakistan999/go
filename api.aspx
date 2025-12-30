@@ -8,19 +8,24 @@
 
     void Page_Load(object sender, EventArgs e)
     {
-        Response.ContentType = "application/json";
-        Response.Charset = "utf-8";
+        // CORS headers - must be set first
+        Response.ClearHeaders();
         Response.AddHeader("Access-Control-Allow-Origin", "*");
         Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        Response.AddHeader("Access-Control-Allow-Headers", "Content-Type, X-Password");
+        Response.AddHeader("Access-Control-Allow-Headers", "Content-Type, X-Password, X-Requested-With");
+        Response.AddHeader("Access-Control-Max-Age", "86400");
 
         // Handle preflight request
         if (Request.HttpMethod == "OPTIONS")
         {
+            Response.ContentType = "text/plain";
             Response.StatusCode = 200;
             Response.End();
             return;
         }
+
+        Response.ContentType = "application/json";
+        Response.Charset = "utf-8";
 
         string action = GetParam("action");
         if (action == null) action = "";
