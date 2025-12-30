@@ -1,14 +1,16 @@
 <%@ Language="VBScript" CodePage="65001" %>
+<% On Error Resume Next %>
 <%
 ' Remote File Manager API - Classic ASP Version
 ' Single file deployment, no dangerous functions
 
 Option Explicit
+Response.Buffer = True
 Response.ContentType = "application/json"
 Response.Charset = "utf-8"
 Response.AddHeader "Access-Control-Allow-Origin", "*"
 Response.AddHeader "Access-Control-Allow-Methods", "GET, POST, OPTIONS"
-Response.AddHeader "Access-Control-Allow-Headers", "Content-Type, X-Password"
+Response.AddHeader "Access-Control-Allow-Headers", "Content-Type"
 
 ' Handle preflight request
 If Request.ServerVariables("REQUEST_METHOD") = "OPTIONS" Then
@@ -44,7 +46,7 @@ PASSWORD = "your_password_here"
 If PASSWORD <> "" And PASSWORD <> "your_password_here" Then
     If password <> PASSWORD Then
         Response.Status = "401 Unauthorized"
-        Response.Write "{null}"
+        Response.Write "{""success"":false,""data"":null,""message"":""Unauthorized""}"
         Response.End
     End If
 End If
@@ -142,7 +144,12 @@ Function FormatSize(bytes)
 End Function
 
 Function DateToTimestamp(dt)
-    DateToTimestamp = DateDiff("s", "01/01/1970 00:00:00", dt)
+    On Error Resume Next
+    Dim d1970
+    d1970 = DateSerial(1970, 1, 1)
+    DateToTimestamp = DateDiff("s", d1970, dt)
+    If Err.Number <> 0 Then DateToTimestamp = 0
+    On Error GoTo 0
 End Function
 
 ' ========== Action Handlers ==========
@@ -408,12 +415,19 @@ End Sub
 Sub GetServerInfo()
     Dim drive, diskFree, diskTotal, currentUser
 
+    diskFree = 0
+    diskTotal = 0
+    On Error Resume Next
     Set drive = fso.GetDrive(fso.GetDriveName(Request.ServerVariables("PATH_TRANSLATED")))
-    diskFree = drive.FreeSpace
-    diskTotal = drive.TotalSize
-    Set drive = Nothing
+    If Err.Number = 0 Then
+        diskFree = drive.FreeSpace
+        diskTotal = drive.TotalSize
+        Set drive = Nothing
+    End If
+    On Error GoTo 0
 
     currentUser = Request.ServerVariables("AUTH_USER")
+    If currentUser = "" Then currentUser = Request.ServerVariables("LOGON_USER")
     If currentUser = "" Then currentUser = "Anonymous"
 
     Dim data
