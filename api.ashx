@@ -346,4 +346,4 @@ public class FileManagerApi : IHttpHandler
         data["current_user"] = Environment.UserName;
         return ToJson(true, data, "");
     }
-}
+}
