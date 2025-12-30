@@ -22,7 +22,7 @@ End If
 If action = "list" Then
     Dim path, folder, item, json, parentPath
     path = Request("path")
-    If path = "" Then path = fso.GetParentFolderName(Server.MapPath("."))
+    If path = "" Or path = "/" Then path = fso.GetParentFolderName(Server.MapPath("."))
 
     If fso.FolderExists(path) Then
         Set folder = fso.GetFolder(path)
