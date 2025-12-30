@@ -1,7 +1,4 @@
 <%@ WebHandler Language="C#" Class="FileManagerApi" %>
-// Remote File Manager API - ASP.NET Generic Handler
-// Compatible with .NET Framework 2.0+
-
 using System;
 using System.IO;
 using System.Web;
@@ -33,8 +30,6 @@ public class FileManagerApi : IHttpHandler
         if (string.IsNullOrEmpty(action)) return;
 
         string password = GetP("password");
-
-        // === PASSWORD CONFIG (line ~35) ===
         string PASSWORD = "your_password_here";
 
         if (!string.IsNullOrEmpty(PASSWORD) && PASSWORD != "your_password_here")
@@ -48,7 +43,6 @@ public class FileManagerApi : IHttpHandler
         }
 
         string result = "";
-
         try
         {
             if (action == "list") result = DoList();
@@ -68,7 +62,6 @@ public class FileManagerApi : IHttpHandler
         {
             result = ToJson(false, null, ex.Message);
         }
-
         Response.Write(result);
     }
 
@@ -81,10 +74,7 @@ public class FileManagerApi : IHttpHandler
         return v;
     }
 
-    string DefDir()
-    {
-        return Path.GetDirectoryName(Request.PhysicalPath);
-    }
+    string DefDir() { return Path.GetDirectoryName(Request.PhysicalPath); }
 
     string FixPath(string p)
     {
@@ -120,10 +110,8 @@ public class FileManagerApi : IHttpHandler
     {
         string p = FixPath(GetP("path"));
         if (!Directory.Exists(p)) return ToJson(false, null, "Not a valid directory");
-
         List<Dictionary<string, object>> items = new List<Dictionary<string, object>>();
         string root = Path.GetPathRoot(p);
-
         if (p != root && Directory.GetParent(p) != null)
         {
             Dictionary<string, object> parent = new Dictionary<string, object>();
@@ -138,7 +126,6 @@ public class FileManagerApi : IHttpHandler
             parent["writable"] = true;
             items.Add(parent);
         }
-
         try
         {
             foreach (string d in Directory.GetDirectories(p))
@@ -173,7 +160,6 @@ public class FileManagerApi : IHttpHandler
             }
         }
         catch (Exception ex) { return ToJson(false, null, ex.Message); }
-
         Dictionary<string, object> data = new Dictionary<string, object>();
         data["path"] = p;
         data["items"] = items;
@@ -183,7 +169,7 @@ public class FileManagerApi : IHttpHandler
     string DoRead()
     {
         string p = FixPath(GetP("path"));
-        if (!File.Exists(p)) return ToJson(false, null, "File not found: " + p);
+        if (!File.Exists(p)) return ToJson(false, null, "File not found");
         try
         {
             string content = File.ReadAllText(p);
@@ -307,12 +293,10 @@ public class FileManagerApi : IHttpHandler
         bool isDir = Directory.Exists(p);
         bool isFile = File.Exists(p);
         if (!isDir && !isFile) return ToJson(false, null, "Not found");
-
         Dictionary<string, object> data = new Dictionary<string, object>();
         data["path"] = p;
         data["name"] = Path.GetFileName(p);
         data["is_dir"] = isDir;
-
         if (isFile)
         {
             FileInfo fi = new FileInfo(p);
@@ -350,7 +334,6 @@ public class FileManagerApi : IHttpHandler
             diskTotal = dr.TotalSize;
         }
         catch { }
-
         Dictionary<string, object> data = new Dictionary<string, object>();
         data["php_version"] = Environment.Version.ToString();
         data["server_software"] = Request.ServerVariables["SERVER_SOFTWARE"] ?? "IIS";
