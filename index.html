@@ -874,11 +874,13 @@
                 html += `<a href="javascript:void(0)" onclick="loadDirectory('${buildPath.replace(/\\/g, '\\\\')}')">${escapeHtml(parts[0])}</a>`;
                 parts.shift();
             } else {
+                // Unix path - start with /
+                buildPath = '';
                 html += `<a href="javascript:void(0)" onclick="loadDirectory('/')">Root</a>`;
             }
 
             parts.forEach((part, i) => {
-                buildPath += (buildPath.endsWith('\\') || buildPath.endsWith('/') || buildPath === '') ? part : sep + part;
+                buildPath += '/' + part;
                 const escapedPath = buildPath.replace(/\\/g, '\\\\');
                 html += `<span class="sep">${sep}</span><a href="javascript:void(0)" onclick="loadDirectory('${escapedPath}')">${escapeHtml(part)}</a>`;
             });
