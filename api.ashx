@@ -1,4 +1,6 @@
 <%@ WebHandler Language="C#" Class="FileManagerApi" %>
+// Remote File Manager API - ASP.NET Generic Handler
+// Compatible with .NET Framework 2.0+
 
 using System;
 using System.IO;
