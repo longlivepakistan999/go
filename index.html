@@ -659,16 +659,8 @@
             // 检查是否为文件上传（params是FormData且包含file字段）
             const isFileUpload = params instanceof FormData && params.has('file');
 
-            // 非文件上传的参数全部放到URL中（兼容Classic ASP）
-            if (!isFileUpload) {
-                if (params instanceof FormData) {
-                    for (const [key, value] of params.entries()) {
-                        url.searchParams.set(key, value);
-                    }
-                } else {
-                    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
-                }
-            }
+            // 检查是否有content字段（需要用urlencoded body发送，避免URL过长）
+            const hasContent = !(params instanceof FormData) && params.hasOwnProperty('content');
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -678,9 +670,24 @@
                 signal: controller.signal
             };
 
-            // 只有文件上传才使用FormData body
-            if (method === 'POST' && isFileUpload) {
+            if (isFileUpload) {
+                // 文件上传：使用FormData body
                 options.body = params;
+            } else if (hasContent && method === 'POST') {
+                // 有content字段：使用application/x-www-form-urlencoded（Classic ASP可解析）
+                const urlParams = new URLSearchParams();
+                Object.keys(params).forEach(k => urlParams.append(k, params[k]));
+                options.body = urlParams;
+                options.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            } else {
+                // 其他参数：放到URL中
+                if (params instanceof FormData) {
+                    for (const [key, value] of params.entries()) {
+                        url.searchParams.set(key, value);
+                    }
+                } else {
+                    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+                }
             }
 
             try {
