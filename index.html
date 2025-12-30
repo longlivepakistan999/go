@@ -877,10 +877,10 @@
                     html += `<span class="sep">\\</span><a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[i])}</a>`;
                 }
             } else {
-                // Unix path
+                // Unix path - always start with /
                 html += `<a href="javascript:void(0)" onclick="loadDirectory('/')">Root</a>`;
                 for (let i = 0; i < parts.length; i++) {
-                    currentPath += '/' + parts[i];
+                    currentPath = '/' + parts.slice(0, i + 1).join('/');
                     html += `<span class="sep">/</span><a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[i])}</a>`;
                 }
             }
