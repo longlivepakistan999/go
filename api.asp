@@ -39,12 +39,12 @@ If action = "list" Then
 
         For Each item In folder.SubFolders
             If Right(json, 1) <> "[" Then json = json & ","
-            json = json & "{""name"":""" & item.Name & """,""path"":""" & Replace(item.Path, "\", "\\") & """,""is_dir"":true,""size"":0,""size_formatted"":""-"",""mtime"":0,""perms"":""drwxr-xr-x"",""readable"":true,""writable"":true}"
+            json = json & "{""name"":""" & item.Name & """,""path"":""" & Replace(item.Path, "\", "\\") & """,""is_dir"":true,""size"":0,""size_formatted"":""-"",""mtime"":" & DateDiff("s", "1970-01-01 00:00:00", item.DateLastModified) & ",""perms"":""drwxr-xr-x"",""readable"":true,""writable"":true}"
         Next
 
         For Each item In folder.Files
             If Right(json, 1) <> "[" Then json = json & ","
-            json = json & "{""name"":""" & item.Name & """,""path"":""" & Replace(item.Path, "\", "\\") & """,""is_dir"":false,""size"":" & item.Size & ",""size_formatted"":""" & item.Size & " B"",""mtime"":0,""perms"":""-rw-r--r--"",""readable"":true,""writable"":true}"
+            json = json & "{""name"":""" & item.Name & """,""path"":""" & Replace(item.Path, "\", "\\") & """,""is_dir"":false,""size"":" & item.Size & ",""size_formatted"":""" & item.Size & " B"",""mtime"":" & DateDiff("s", "1970-01-01 00:00:00", item.DateLastModified) & ",""perms"":""-rw-r--r--"",""readable"":true,""writable"":true}"
         Next
 
         json = json & "]},""message"":""""}"
@@ -170,15 +170,21 @@ ElseIf action = "touch" Then
     Response.Write "{""success"":false,""message"":""Not supported""}"
 
 ElseIf action = "info" Then
-    Dim iPath, iFile, iFolder
+    Dim iPath, iFile, iFolder, iMtime, iCtime, iAtime
     iPath = Request("path")
     If fso.FileExists(iPath) Then
         Set iFile = fso.GetFile(iPath)
-        Response.Write "{""success"":true,""data"":{""path"":""" & Replace(iPath, "\", "\\") & """,""name"":""" & iFile.Name & """,""is_dir"":false,""size"":" & iFile.Size & ",""size_formatted"":""" & iFile.Size & " B"",""mtime"":0,""ctime"":0,""atime"":0,""perms"":""-rw-r--r--"",""readable"":true,""writable"":true},""message"":""""}"
+        iMtime = DateDiff("s", "1970-01-01 00:00:00", iFile.DateLastModified)
+        iCtime = DateDiff("s", "1970-01-01 00:00:00", iFile.DateCreated)
+        iAtime = DateDiff("s", "1970-01-01 00:00:00", iFile.DateLastAccessed)
+        Response.Write "{""success"":true,""data"":{""path"":""" & Replace(iPath, "\", "\\") & """,""name"":""" & iFile.Name & """,""is_dir"":false,""size"":" & iFile.Size & ",""size_formatted"":""" & iFile.Size & " B"",""mtime"":" & iMtime & ",""ctime"":" & iCtime & ",""atime"":" & iAtime & ",""perms"":""-rw-r--r--"",""perms_octal"":""0644"",""readable"":true,""writable"":true,""owner"":0,""group"":0},""message"":""""}"
         Set iFile = Nothing
     ElseIf fso.FolderExists(iPath) Then
         Set iFolder = fso.GetFolder(iPath)
-        Response.Write "{""success"":true,""data"":{""path"":""" & Replace(iPath, "\", "\\") & """,""name"":""" & iFolder.Name & """,""is_dir"":true,""size"":0,""size_formatted"":""-"",""mtime"":0,""ctime"":0,""atime"":0,""perms"":""drwxr-xr-x"",""readable"":true,""writable"":true},""message"":""""}"
+        iMtime = DateDiff("s", "1970-01-01 00:00:00", iFolder.DateLastModified)
+        iCtime = DateDiff("s", "1970-01-01 00:00:00", iFolder.DateCreated)
+        iAtime = DateDiff("s", "1970-01-01 00:00:00", iFolder.DateLastAccessed)
+        Response.Write "{""success"":true,""data"":{""path"":""" & Replace(iPath, "\", "\\") & """,""name"":""" & iFolder.Name & """,""is_dir"":true,""size"":0,""size_formatted"":""-"",""mtime"":" & iMtime & ",""ctime"":" & iCtime & ",""atime"":" & iAtime & ",""perms"":""drwxr-xr-x"",""perms_octal"":""0755"",""readable"":true,""writable"":true,""owner"":0,""group"":0},""message"":""""}"
         Set iFolder = Nothing
     Else
         Response.Write "{""success"":false,""message"":""Not found""}"
