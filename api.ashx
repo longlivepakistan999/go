@@ -16,15 +16,6 @@ public class FileManagerApi : IHttpHandler
         ctx = context;
         Response.ContentType = "application/json";
         Response.Charset = "utf-8";
-        Response.AddHeader("Access-Control-Allow-Origin", "*");
-        Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        Response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
-
-        if (Request.HttpMethod == "OPTIONS")
-        {
-            Response.StatusCode = 200;
-            return;
-        }
 
         string action = GetP("action");
         if (string.IsNullOrEmpty(action)) return;

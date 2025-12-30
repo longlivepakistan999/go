@@ -2,21 +2,11 @@
 <% On Error Resume Next %>
 <%
 ' Remote File Manager API - Classic ASP Version
-' Single file deployment, no dangerous functions
 
 Option Explicit
 Response.Buffer = True
 Response.ContentType = "application/json"
 Response.Charset = "utf-8"
-Response.AddHeader "Access-Control-Allow-Origin", "*"
-Response.AddHeader "Access-Control-Allow-Methods", "GET, POST, OPTIONS"
-Response.AddHeader "Access-Control-Allow-Headers", "Content-Type"
-
-' Handle preflight request
-If Request.ServerVariables("REQUEST_METHOD") = "OPTIONS" Then
-    Response.Status = "200 OK"
-    Response.End
-End If
 
 Dim fso, action, password, PASSWORD
 
