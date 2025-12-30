@@ -258,7 +258,7 @@
 
         if (!File.Exists(path))
         {
-            SendResponse(false, null, "File does not exist");
+            SendResponse(false, null, "File does not exist: " + path);
             return;
         }
 
