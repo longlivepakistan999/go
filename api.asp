@@ -1,4 +1,5 @@
 <%
+On Error Resume Next
 Response.Buffer = True
 Response.ContentType = "application/json"
 Response.AddHeader "Access-Control-Allow-Origin", "*"
@@ -23,7 +24,9 @@ End If
 If action = "list" Then
     Dim path, folder, item, json, parentPath
     path = Request("path")
-    If path = "" Or path = "/" Then path = fso.GetParentFolderName(Server.MapPath("."))
+    If path = "" Or path = "/" Then
+        path = Server.MapPath(".")
+    End If
 
     If fso.FolderExists(path) Then
         Set folder = fso.GetFolder(path)
