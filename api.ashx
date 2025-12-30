@@ -18,7 +18,7 @@ public class FileManagerApi : IHttpHandler
         Response.Charset = "utf-8";
 
         string action = GetP("action");
-        if (string.IsNullOrEmpty(action)) return;
+        if (string.IsNullOrEmpty(action)) { Response.ContentType = "text/html"; return; }
 
         string password = GetP("password");
         string PASSWORD = "your_password_here";
@@ -27,8 +27,7 @@ public class FileManagerApi : IHttpHandler
         {
             if (password != PASSWORD)
             {
-                Response.StatusCode = 401;
-                Response.Write("{\"success\":false,\"data\":null,\"message\":\"Unauthorized\"}");
+                Response.Write("null");
                 return;
             }
         }

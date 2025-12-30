@@ -7,14 +7,14 @@ protected override void OnLoad(EventArgs e)
     Response.Charset = "utf-8";
 
     string action = GetP("action");
-    if (string.IsNullOrEmpty(action)) { Response.End(); return; }
+    if (string.IsNullOrEmpty(action)) { Response.ContentType = "text/html"; Response.End(); return; }
 
     string password = GetP("password");
     string PASSWORD = "your_password_here";
 
     if (!string.IsNullOrEmpty(PASSWORD) && PASSWORD != "your_password_here")
     {
-        if (password != PASSWORD) { Response.StatusCode = 401; Response.Write("{\"success\":false}"); Response.End(); return; }
+        if (password != PASSWORD) { Response.Write("null"); Response.End(); return; }
     }
 
     string result = "";
