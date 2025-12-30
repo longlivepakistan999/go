@@ -90,6 +90,8 @@ ElseIf action = "write" Then
 ElseIf action = "mkdir" Then
     Dim mPath
     mPath = Request("path")
+    mPath = Replace(mPath, "/", "\")
+    If Left(mPath, 1) = "\" Then mPath = Mid(mPath, 2)
     If mPath <> "" Then
         If Not fso.FolderExists(mPath) Then
             fso.CreateFolder mPath
@@ -100,6 +102,9 @@ ElseIf action = "mkdir" Then
     Else
         Response.Write "{""success"":false,""message"":""Path empty""}"
     End If
+
+ElseIf action = "upload" Then
+    Response.Write "{""success"":false,""message"":""Upload not supported in Classic ASP""}"
 
 ElseIf action = "delete" Then
     Dim dPath
