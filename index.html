@@ -881,36 +881,48 @@
             updatePathNav(path);
 
             const fileList = document.getElementById('fileList');
-            fileList.innerHTML = data.items.map(item => `
-                <tr oncontextmenu="showContextMenu(event, ${JSON.stringify(item).replace(/"/g, '&quot;')})">
-                    <td>
-                        <div class="name-cell" onclick="itemClick(${JSON.stringify(item).replace(/"/g, '&quot;')})">
+            const rows = [];
+            for (const item of data.items) {
+                try {
+                    const itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
+                    const pathEsc = escapeJs(item.path);
+                    const nameEsc = escapeJs(item.name);
+                    const nameHtml = escapeHtml(item.name);
+
+                    let actions = '';
+                    if (!item.is_dir && item.name !== '..') {
+                        actions += `<button class="btn-secondary" onclick="viewFile('${pathEsc}')">查看</button>`;
+                        actions += `<button class="btn-primary" onclick="editFile('${pathEsc}')">编辑</button>`;
+                        actions += `<button class="btn-success" onclick="downloadFile('${pathEsc}')">下载</button>`;
+                    }
+                    if (item.name !== '..') {
+                        actions += `<button class="btn-secondary" onclick="touchFile('${pathEsc}', ${item.mtime || 0})">时间</button>`;
+                        actions += `<button class="btn-secondary" onclick="openChmodModal('${pathEsc}')">权限</button>`;
+                        actions += `<button class="btn-danger" onclick="deleteItem('${pathEsc}', '${nameEsc}')">删除</button>`;
+                    }
+
+                    let badges = '';
+                    if (item.readable) badges += '<span class="badge badge-success">可读</span>';
+                    if (item.writable) badges += '<span class="badge badge-primary">可写</span>';
+                    if (!item.readable && !item.writable) badges += '<span class="badge badge-danger">无权限</span>';
+
+                    rows.push(`<tr oncontextmenu="showContextMenu(event, ${itemJson})">
+                        <td><div class="name-cell" onclick="itemClick(${itemJson})">
                             <span class="icon">${item.is_dir ? '📁' : '📄'}</span>
-                            <span class="name">${escapeHtml(item.name)}</span>
-                        </div>
-                    </td>
-                    <td class="size">${item.size_formatted}</td>
-                    <td class="perms">${item.perms}</td>
-                    <td class="time">${item.mtime ? formatTime(item.mtime) : '-'}</td>
-                    <td>
-                        ${item.readable ? '<span class="badge badge-success">可读</span>' : ''}
-                        ${item.writable ? '<span class="badge badge-primary">可写</span>' : ''}
-                        ${!item.readable && !item.writable ? '<span class="badge badge-danger">无权限</span>' : ''}
-                    </td>
-                    <td class="actions">
-                        ${!item.is_dir && item.name !== '..' ? `
-                            <button class="btn-secondary" onclick="viewFile('${escapeJs(item.path)}')">查看</button>
-                            <button class="btn-primary" onclick="editFile('${escapeJs(item.path)}')">编辑</button>
-                            <button class="btn-success" onclick="downloadFile('${escapeJs(item.path)}')">下载</button>
-                        ` : ''}
-                        ${item.name !== '..' ? `
-                            <button class="btn-secondary" onclick="touchFile('${escapeJs(item.path)}', ${item.mtime || 0})">时间</button>
-                            <button class="btn-secondary" onclick="openChmodModal('${escapeJs(item.path)}')">权限</button>
-                            <button class="btn-danger" onclick="deleteItem('${escapeJs(item.path)}', '${escapeJs(item.name)}')">删除</button>
-                        ` : ''}
-                    </td>
-                </tr>
-            `).join('');
+                            <span class="name">${nameHtml}</span>
+                        </div></td>
+                        <td class="size">${item.size_formatted}</td>
+                        <td class="perms">${item.perms}</td>
+                        <td class="time">${item.mtime ? formatTime(item.mtime) : '-'}</td>
+                        <td>${badges}</td>
+                        <td class="actions">${actions}</td>
+                    </tr>`);
+                } catch (e) {
+                    console.error('Error rendering item:', item, e);
+                    rows.push(`<tr><td colspan="6" style="color:red">Error: ${escapeHtml(item.name || 'unknown')}</td></tr>`);
+                }
+            }
+            fileList.innerHTML = rows.join('');
         }
 
         // 加载目录
