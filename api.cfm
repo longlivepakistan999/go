@@ -175,8 +175,12 @@
         </cfif>
 
     <cfelseif action EQ "touch">
-        <cfparam name="url.time" default="0">
-        <cfset path = url.path>
+        <!--- Check both url and form scopes for parameters --->
+        <cfparam name="url.time" default="">
+        <cfparam name="form.time" default="">
+        <cfparam name="form.path" default="">
+        <cfset path = len(url.path) ? url.path : form.path>
+        <cfset timeVal = len(url.time) ? url.time : form.time>
         <!--- Normalize path separators for Windows --->
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
@@ -185,7 +189,7 @@
         <cfif right(path, 1) EQ "/" OR right(path, 1) EQ "\">
             <cfset path = left(path, len(path) - 1)>
         </cfif>
-        <cfset timestamp = val(url.time)>
+        <cfset timestamp = val(timeVal)>
         <cftry>
             <!--- Use Java File API for checking and setting --->
             <cfset javaFile = createObject("java", "java.io.File").init(path)>
