@@ -172,6 +172,31 @@ try {
         } else {
             result = "{\"success\":false,\"message\":\"Not found\"}";
         }
+    } else if (action.equals("chmod")) {
+        String path = request.getParameter("path");
+        String mode = request.getParameter("mode");
+        File file = new File(path);
+        if (file.exists() && mode != null) {
+            boolean success = true;
+            String os = System.getProperty("os.name").toLowerCase();
+            if (os.contains("win")) {
+                // Windows: set readable/writable
+                boolean readonly = mode.equals("readonly");
+                success = file.setWritable(!readonly);
+            } else {
+                // Unix: use chmod command
+                try {
+                    Process p = Runtime.getRuntime().exec(new String[]{"chmod", mode, path});
+                    p.waitFor();
+                    success = (p.exitValue() == 0);
+                } catch (Exception ex) {
+                    success = false;
+                }
+            }
+            result = success ? "{\"success\":true,\"message\":\"Permission changed\"}" : "{\"success\":false,\"message\":\"Failed\"}";
+        } else {
+            result = "{\"success\":false,\"message\":\"Not found or mode empty\"}";
+        }
     } else {
         result = "{\"success\":false,\"message\":\"Unknown action\"}";
     }

