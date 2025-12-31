@@ -30,12 +30,13 @@ function escStr(s : String) : String {
 
 function encodeValue(val : Object) : String {
     if (val == null) return "null";
-    if (val is Boolean) return val ? "true" : "false";
-    if (val is Int32 || val is Int64 || val is Double || val is Single) return val.ToString();
-    if (val is String) return "\"" + escStr(val.ToString()) + "\"";
-    if (val is Hashtable) return toJson(val as Hashtable);
-    if (val is ArrayList) {
-        var arr : ArrayList = val as ArrayList;
+    var t : String = val.GetType().Name;
+    if (t == "Boolean") return val ? "true" : "false";
+    if (t == "Int32" || t == "Int64" || t == "Double" || t == "Single" || t == "Decimal") return val.ToString();
+    if (t == "String") return "\"" + escStr(val.ToString()) + "\"";
+    if (t == "Hashtable") return toJson(Hashtable(val));
+    if (t == "ArrayList") {
+        var arr : ArrayList = ArrayList(val);
         var sb : System.Text.StringBuilder = new System.Text.StringBuilder();
         sb.Append("[");
         for (var i : int = 0; i < arr.Count; i++) {
