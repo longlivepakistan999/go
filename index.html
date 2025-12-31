@@ -899,7 +899,8 @@
                             <button class="btn-success" onclick="downloadFile('${escapeJs(item.path)}')">下载</button>
                         ` : ''}
                         ${item.name !== '..' ? `
-                            <button class="btn-secondary" onclick="touchFile('${escapeJs(item.path)}', ${item.mtime || 0})">修改时间</button>
+                            <button class="btn-secondary" onclick="touchFile('${escapeJs(item.path)}', ${item.mtime || 0})">时间</button>
+                            <button class="btn-secondary" onclick="openChmodModal('${escapeJs(item.path)}')">权限</button>
                             <button class="btn-danger" onclick="deleteItem('${escapeJs(item.path)}', '${escapeJs(item.name)}')">删除</button>
                         ` : ''}
                     </td>
