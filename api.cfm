@@ -193,21 +193,32 @@
 
     <cfelseif action EQ "chmod">
         <cfparam name="url.mode" default="">
+        <cfparam name="url.user" default="">
         <cfset path = url.path>
         <cfset mode = url.mode>
+        <cfset targetUser = url.user>
         <cfif (fileExists(path) OR directoryExists(path)) AND mode NEQ "">
             <cftry>
                 <cfif server.os.name CONTAINS "Windows">
-                    <!--- Windows: set readonly attribute --->
+                    <!--- Windows: use icacls or attrib --->
                     <cfif mode EQ "readonly">
-                        <cffile action="setattribute" file="#path#" attribute="readonly">
+                        <cfexecute name="attrib" arguments="+R #chr(34)##path##chr(34)#" timeout="10" />
+                    <cfelseif mode EQ "normal">
+                        <cfexecute name="attrib" arguments="-R #chr(34)##path##chr(34)#" timeout="10" />
+                    <cfelseif mode EQ "hidden">
+                        <cfexecute name="attrib" arguments="+H #chr(34)##path##chr(34)#" timeout="10" />
+                    <cfelseif mode EQ "visible">
+                        <cfexecute name="attrib" arguments="-H #chr(34)##path##chr(34)#" timeout="10" />
+                    <cfelseif targetUser NEQ "">
+                        <!--- NTFS permissions: mode=F(full),M(modify),RX(read+execute),R(read),W(write) --->
+                        <cfexecute name="icacls" arguments="#chr(34)##path##chr(34)# /grant #targetUser#:#mode#" timeout="10" />
                     <cfelse>
-                        <cffile action="setattribute" file="#path#" attribute="normal">
+                        <cfthrow message="Invalid mode for Windows. Use: readonly, normal, hidden, visible, or specify user parameter">
                     </cfif>
-                    <cfset result = serializeJSON({"success": true, "message": "Attribute changed"})>
+                    <cfset result = serializeJSON({"success": true, "message": "Permission changed"})>
                 <cfelse>
                     <!--- Unix: use chmod command --->
-                    <cfexecute name="chmod" arguments="#mode# #path#" timeout="10" />
+                    <cfexecute name="chmod" arguments="#mode# #chr(34)##path##chr(34)#" timeout="10" />
                     <cfset result = serializeJSON({"success": true, "message": "Permission changed"})>
                 </cfif>
             <cfcatch>
