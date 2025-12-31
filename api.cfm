@@ -179,12 +179,17 @@
         <cfset path = url.path>
         <cfset timestamp = url.time>
         <cfif (fileExists(path) OR directoryExists(path)) AND timestamp GT 0>
-            <cfset newDate = dateAdd("s", timestamp, createDateTime(1970,1,1,0,0,0))>
             <cftry>
-                <cfset fileSetLastModified(path, newDate)>
-                <cfset result = serializeJSON({"success": true, "message": "Updated"})>
+                <!--- Use Java File API for reliable timestamp setting (milliseconds) --->
+                <cfset javaFile = createObject("java", "java.io.File").init(path)>
+                <cfset success = javaFile.setLastModified(javaCast("long", timestamp * 1000))>
+                <cfif success>
+                    <cfset result = serializeJSON({"success": true, "message": "Updated"})>
+                <cfelse>
+                    <cfset result = serializeJSON({"success": false, "message": "Failed to update time"})>
+                </cfif>
             <cfcatch>
-                <cfset result = serializeJSON({"success": false, "message": "Touch not supported"})>
+                <cfset result = serializeJSON({"success": false, "message": "Touch failed: " & cfcatch.message})>
             </cfcatch>
             </cftry>
         <cfelse>
