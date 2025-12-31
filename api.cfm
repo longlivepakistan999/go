@@ -103,6 +103,9 @@
 
     <cfelseif action EQ "read">
         <cfset path = url.path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <cfif fileExists(path)>
             <cffile action="read" file="#path#" variable="content" charset="utf-8">
             <cfset result = serializeJSON({
@@ -119,6 +122,9 @@
 
     <cfelseif action EQ "write">
         <cfset path = len(url.path) ? url.path : form.path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <cfset content = form.content>
         <cfif path NEQ "">
             <cffile action="write" file="#path#" output="#content#" charset="utf-8">
@@ -129,6 +135,9 @@
 
     <cfelseif action EQ "mkdir">
         <cfset path = url.path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <cfif path NEQ "">
             <cfif NOT directoryExists(path)>
                 <cfdirectory action="create" directory="#path#">
@@ -141,7 +150,16 @@
         </cfif>
 
     <cfelseif action EQ "delete">
-        <cfset path = url.path>
+        <cfparam name="form.path" default="">
+        <cfset path = len(url.path) ? url.path : form.path>
+        <!--- Normalize path separators for Windows --->
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
+        <!--- Remove trailing slash --->
+        <cfif len(path) GT 1 AND (right(path, 1) EQ "/" OR right(path, 1) EQ "\")>
+            <cfset path = left(path, len(path) - 1)>
+        </cfif>
         <cfif directoryExists(path)>
             <cfdirectory action="delete" directory="#path#" recurse="true">
             <cfset result = serializeJSON({"success": true, "message": "Deleted"})>
@@ -155,11 +173,17 @@
     <cfelseif action EQ "rename">
         <cfparam name="url.old_path" default="">
         <cfparam name="url.new_path" default="">
-        <cfif directoryExists(url.old_path)>
-            <cfdirectory action="rename" directory="#url.old_path#" newdirectory="#url.new_path#">
+        <cfset oldPath = url.old_path>
+        <cfset newPath = url.new_path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset oldPath = replace(oldPath, "/", "\", "all")>
+            <cfset newPath = replace(newPath, "/", "\", "all")>
+        </cfif>
+        <cfif directoryExists(oldPath)>
+            <cfdirectory action="rename" directory="#oldPath#" newdirectory="#newPath#">
             <cfset result = serializeJSON({"success": true, "message": "Renamed"})>
-        <cfelseif fileExists(url.old_path)>
-            <cffile action="rename" source="#url.old_path#" destination="#url.new_path#">
+        <cfelseif fileExists(oldPath)>
+            <cffile action="rename" source="#oldPath#" destination="#newPath#">
             <cfset result = serializeJSON({"success": true, "message": "Renamed"})>
         <cfelse>
             <cfset result = serializeJSON({"success": false, "message": "Not found"})>
@@ -167,6 +191,9 @@
 
     <cfelseif action EQ "download">
         <cfset path = url.path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <cfif fileExists(path)>
             <cfheader name="Content-Disposition" value="attachment; filename=#getFileFromPath(path)#">
             <cfcontent type="application/octet-stream" file="#path#">
@@ -227,6 +254,9 @@
         <cfparam name="url.mode" default="">
         <cfparam name="url.user" default="">
         <cfset path = url.path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <cfset mode = url.mode>
         <cfset targetUser = url.user>
         <cfif (fileExists(path) OR directoryExists(path)) AND mode NEQ "">
@@ -285,6 +315,9 @@
 
     <cfelseif action EQ "info">
         <cfset path = url.path>
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <cfif fileExists(path)>
             <cfset fileInfo = getFileInfo(path)>
             <cfset mtime = dateDiff("s", createDateTime(1970,1,1,0,0,0), fileInfo.lastmodified)>
