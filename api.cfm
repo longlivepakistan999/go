@@ -177,7 +177,7 @@
     <cfelseif action EQ "touch">
         <cfparam name="url.time" default="0">
         <cfset path = url.path>
-        <cfset timestamp = url.time>
+        <cfset timestamp = val(url.time)>
         <cfif (fileExists(path) OR directoryExists(path)) AND timestamp GT 0>
             <cftry>
                 <!--- Use Java File API for reliable timestamp setting (milliseconds) --->
