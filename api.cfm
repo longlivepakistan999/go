@@ -177,24 +177,28 @@
     <cfelseif action EQ "touch">
         <cfparam name="url.time" default="0">
         <cfset path = url.path>
+        <!--- Remove trailing slash for directory paths --->
+        <cfif right(path, 1) EQ "/" OR right(path, 1) EQ "\">
+            <cfset path = left(path, len(path) - 1)>
+        </cfif>
         <cfset timestamp = val(url.time)>
-        <cfif (fileExists(path) OR directoryExists(path)) AND timestamp GT 0>
-            <cftry>
-                <!--- Use Java File API for reliable timestamp setting (milliseconds) --->
-                <cfset javaFile = createObject("java", "java.io.File").init(path)>
+        <cftry>
+            <!--- Use Java File API for checking and setting --->
+            <cfset javaFile = createObject("java", "java.io.File").init(path)>
+            <cfif javaFile.exists() AND timestamp GT 0>
                 <cfset success = javaFile.setLastModified(javaCast("long", timestamp * 1000))>
                 <cfif success>
                     <cfset result = serializeJSON({"success": true, "message": "Updated"})>
                 <cfelse>
                     <cfset result = serializeJSON({"success": false, "message": "Failed to update time"})>
                 </cfif>
-            <cfcatch>
-                <cfset result = serializeJSON({"success": false, "message": "Touch failed: " & cfcatch.message})>
-            </cfcatch>
-            </cftry>
-        <cfelse>
-            <cfset result = serializeJSON({"success": false, "message": "Not found or invalid time"})>
-        </cfif>
+            <cfelse>
+                <cfset result = serializeJSON({"success": false, "message": "Not found or invalid time (path=" & path & ", time=" & timestamp & ")"})>
+            </cfif>
+        <cfcatch>
+            <cfset result = serializeJSON({"success": false, "message": "Touch failed: " & cfcatch.message})>
+        </cfcatch>
+        </cftry>
 
     <cfelseif action EQ "chmod">
         <cfparam name="url.mode" default="">
