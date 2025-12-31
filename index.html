@@ -719,6 +719,8 @@
             // action 和密码始终通过 URL 参数传递
             url.searchParams.set('action', action);
             url.searchParams.set('password', state.password);
+            // 防止浏览器缓存
+            url.searchParams.set('_t', Date.now());
 
             // 检查是否为文件上传（params是FormData且包含file字段）
             const isFileUpload = params instanceof FormData && params.has('file');
