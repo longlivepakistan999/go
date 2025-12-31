@@ -1055,6 +1055,13 @@
             }
         }
 
+        // 构建路径，避免双斜杠
+        function buildPath(basePath, name) {
+            // 移除末尾斜杠
+            const cleanBase = basePath.replace(/[\/\\]+$/, '');
+            return cleanBase + '/' + name;
+        }
+
         // 创建目录
         async function createDir() {
             const name = document.getElementById('newName').value.trim();
@@ -1063,7 +1070,7 @@
                 return;
             }
 
-            const path = state.currentPath + '/' + name;
+            const path = buildPath(state.currentPath, name);
             const result = await apiRequest('mkdir', { path }, 'POST');
 
             if (result.success) {
@@ -1083,7 +1090,7 @@
                 return;
             }
 
-            const path = state.currentPath + '/' + name;
+            const path = buildPath(state.currentPath, name);
             const result = await apiRequest('write', { path, content: '' }, 'POST');
 
             if (result.success) {

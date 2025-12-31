@@ -35,9 +35,11 @@
         <cfif path EQ "" OR path EQ "/">
             <cfset path = expandPath("/")>
         </cfif>
-        <!--- Normalize path separators for Windows --->
+        <!--- Normalize path separators --->
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <!--- Remove trailing slash for directoryExists check --->
         <cfif len(path) GT 1 AND (right(path, 1) EQ "/" OR right(path, 1) EQ "\")>
@@ -105,6 +107,8 @@
         <cfset path = url.path>
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <cfif fileExists(path)>
             <cffile action="read" file="#path#" variable="content" charset="utf-8">
@@ -124,6 +128,9 @@
         <cfset path = len(url.path) ? url.path : form.path>
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <!--- Linux: clean up double slashes --->
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <cfset content = form.content>
         <cfif path NEQ "">
@@ -137,6 +144,9 @@
         <cfset path = url.path>
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <!--- Linux: clean up double slashes --->
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <cfif path NEQ "">
             <cfif NOT directoryExists(path)>
@@ -152,9 +162,11 @@
     <cfelseif action EQ "delete">
         <cfparam name="form.path" default="">
         <cfset path = len(url.path) ? url.path : form.path>
-        <!--- Normalize path separators for Windows --->
+        <!--- Normalize path separators --->
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <!--- Remove trailing slash --->
         <cfif len(path) GT 1 AND (right(path, 1) EQ "/" OR right(path, 1) EQ "\")>
@@ -178,6 +190,9 @@
         <cfif server.os.name CONTAINS "Windows">
             <cfset oldPath = replace(oldPath, "/", "\", "all")>
             <cfset newPath = replace(newPath, "/", "\", "all")>
+        <cfelse>
+            <cfset oldPath = reReplace(oldPath, "/+", "/", "all")>
+            <cfset newPath = reReplace(newPath, "/+", "/", "all")>
         </cfif>
         <cfif directoryExists(oldPath)>
             <cfdirectory action="rename" directory="#oldPath#" newdirectory="#newPath#">
@@ -193,6 +208,8 @@
         <cfset path = url.path>
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <cfif fileExists(path)>
             <cfheader name="Content-Disposition" value="attachment; filename=#getFileFromPath(path)#">
@@ -223,9 +240,11 @@
         <cfparam name="form.path" default="">
         <cfset path = len(url.path) ? url.path : form.path>
         <cfset timeVal = len(url.time) ? url.time : form.time>
-        <!--- Normalize path separators for Windows --->
+        <!--- Normalize path separators --->
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <!--- Remove trailing slash for directory paths --->
         <cfif right(path, 1) EQ "/" OR right(path, 1) EQ "\">
@@ -256,6 +275,8 @@
         <cfset path = url.path>
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <cfset mode = url.mode>
         <cfset targetUser = url.user>
@@ -317,6 +338,8 @@
         <cfset path = url.path>
         <cfif server.os.name CONTAINS "Windows">
             <cfset path = replace(path, "/", "\", "all")>
+        <cfelse>
+            <cfset path = reReplace(path, "/+", "/", "all")>
         </cfif>
         <cfif fileExists(path)>
             <cfset fileInfo = getFileInfo(path)>
