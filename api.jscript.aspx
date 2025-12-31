@@ -94,8 +94,10 @@ function formatSize(size) {
 }
 
 function toUnixTime(dt) {
-    var epoch = new Date(1970, 0, 1, 0, 0, 0);
-    return Math.floor((dt.getTime() - epoch.getTime()) / 1000);
+    // dt is .NET DateTime, not JS Date
+    var epoch = new System.DateTime(1970, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);
+    var ticks = dt.ToUniversalTime().Ticks - epoch.Ticks;
+    return Math.floor(ticks / 10000000);
 }
 
 function normPath(p) {
@@ -252,8 +254,8 @@ try {
         var timestamp = 0;
         try { timestamp = parseInt(getParam("time")); } catch (e) {}
         if ((File.Exists(touchPath) || Directory.Exists(touchPath)) && timestamp > 0) {
-            var newTime = new Date(1970, 0, 1);
-            newTime.setSeconds(timestamp);
+            var epoch = new System.DateTime(1970, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);
+            var newTime = epoch.AddSeconds(timestamp).ToLocalTime();
             if (File.Exists(touchPath)) {
                 File.SetLastWriteTime(touchPath, newTime);
             } else {
