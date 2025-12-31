@@ -65,10 +65,12 @@ sub fmt_size {
 }
 
 sub fmt_perm {
-    my $m = shift || 0;
+    my ($m, $path) = @_;
+    $m = 0 unless defined $m;
     my $t = "";
-    if (-d _) { $t = "d"; }
-    elsif (-l _) { $t = "l"; }
+    # 通过 mode 判断类型
+    if (($m & 0170000) == 0040000) { $t = "d"; }  # 目录
+    elsif (($m & 0170000) == 0120000) { $t = "l"; }  # 符号链接
     else { $t = "-"; }
     $t .= ($m & 0400) ? "r" : "-";
     $t .= ($m & 0200) ? "w" : "-";
