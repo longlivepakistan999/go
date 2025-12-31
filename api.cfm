@@ -231,6 +231,12 @@
 
     <cfelseif action EQ "server">
         <cfset docRoot = expandPath("/")>
+        <cftry>
+            <cfset currentUser = createObject("java", "java.lang.System").getProperty("user.name")>
+            <cfcatch>
+                <cfset currentUser = "N/A">
+            </cfcatch>
+        </cftry>
         <cfset result = serializeJSON({
             "success": true,
             "data": {
@@ -240,7 +246,7 @@
                 "upload_max": "N/A",
                 "disk_free": "N/A",
                 "disk_total": "N/A",
-                "current_user": "N/A"
+                "current_user": currentUser
             },
             "message": ""
         })>
