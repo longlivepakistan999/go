@@ -35,8 +35,22 @@
         <cfif path EQ "" OR path EQ "/">
             <cfset path = expandPath("/")>
         </cfif>
+        <!--- Normalize path separators for Windows --->
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
+        <!--- Remove trailing slash for directoryExists check --->
+        <cfif len(path) GT 1 AND (right(path, 1) EQ "/" OR right(path, 1) EQ "\")>
+            <cfset pathCheck = left(path, len(path) - 1)>
+        <cfelse>
+            <cfset pathCheck = path>
+        </cfif>
+        <!--- Ensure path ends with separator for listing --->
+        <cfif NOT (right(path, 1) EQ "/" OR right(path, 1) EQ "\")>
+            <cfset path = path & (server.os.name CONTAINS "Windows" ? "\" : "/")>
+        </cfif>
 
-        <cfif directoryExists(path)>
+        <cfif directoryExists(pathCheck)>
             <cfset items = []>
             <cfset parentPath = getDirectoryFromPath(left(path, len(path)-1))>
             <cfif parentPath NEQ "" AND parentPath NEQ path>
