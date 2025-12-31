@@ -177,6 +177,10 @@
     <cfelseif action EQ "touch">
         <cfparam name="url.time" default="0">
         <cfset path = url.path>
+        <!--- Normalize path separators for Windows --->
+        <cfif server.os.name CONTAINS "Windows">
+            <cfset path = replace(path, "/", "\", "all")>
+        </cfif>
         <!--- Remove trailing slash for directory paths --->
         <cfif right(path, 1) EQ "/" OR right(path, 1) EQ "\">
             <cfset path = left(path, len(path) - 1)>
