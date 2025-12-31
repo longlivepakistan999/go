@@ -69,6 +69,7 @@
 
             <cfdirectory action="list" directory="#path#" name="dirList" sort="type ASC, name ASC">
 
+            <cfset sep = server.os.name CONTAINS "Windows" ? "\" : "/">
             <cfloop query="dirList">
                 <cfset mtime = 0>
                 <cfif isDate(dirList.dateLastModified)>
@@ -77,7 +78,7 @@
                 <cfset isDir = (dirList.type EQ "Dir")>
                 <cfset arrayAppend(items, {
                     "name": dirList.name,
-                    "path": path & dirList.name & (isDir ? "/" : ""),
+                    "path": path & dirList.name & (isDir ? sep : ""),
                     "is_dir": isDir,
                     "size": isDir ? 0 : dirList.size,
                     "size_formatted": isDir ? "-" : dirList.size & " B",
