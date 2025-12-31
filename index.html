@@ -607,6 +607,69 @@
         </div>
     </div>
 
+    <!-- 权限修改模态框 -->
+    <div class="modal" id="chmodModal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>修改权限</h2>
+                <span class="close" onclick="closeChmodModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="time-edit-form">
+                    <div class="time-edit-path" id="chmodPath"></div>
+                    <div class="time-edit-group">
+                        <label>系统类型</label>
+                        <select id="chmodOS" onchange="updateChmodOptions()" style="padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <option value="unix">Linux/Unix</option>
+                            <option value="windows">Windows</option>
+                        </select>
+                    </div>
+                    <div id="chmodUnixOptions">
+                        <div class="time-edit-group">
+                            <label>权限模式 (如: 755, 644)</label>
+                            <input type="text" id="chmodMode" placeholder="755" maxlength="4">
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                            常用: 755(rwxr-xr-x), 644(rw-r--r--), 777(rwxrwxrwx)
+                        </div>
+                    </div>
+                    <div id="chmodWindowsOptions" style="display: none;">
+                        <div class="time-edit-group">
+                            <label>属性操作</label>
+                            <select id="chmodWinMode" style="padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                <option value="readonly">设为只读</option>
+                                <option value="normal">取消只读</option>
+                                <option value="hidden">设为隐藏</option>
+                                <option value="visible">取消隐藏</option>
+                                <option value="ntfs">NTFS权限</option>
+                            </select>
+                        </div>
+                        <div id="chmodNtfsOptions" style="display: none; margin-top: 15px;">
+                            <div class="time-edit-group">
+                                <label>用户/组</label>
+                                <input type="text" id="chmodUser" placeholder="Everyone 或 Users">
+                            </div>
+                            <div class="time-edit-group">
+                                <label>权限级别</label>
+                                <select id="chmodNtfsMode" style="padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                    <option value="F">完全控制 (F)</option>
+                                    <option value="M">修改 (M)</option>
+                                    <option value="RX">读取和执行 (RX)</option>
+                                    <option value="R">读取 (R)</option>
+                                    <option value="W">写入 (W)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeChmodModal()">取消</button>
+                <button class="btn-success" onclick="submitChmod()">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 右键菜单 -->
     <div class="context-menu" id="contextMenu">
         <div class="context-menu-item" onclick="contextAction('open')">打开</div>
@@ -615,6 +678,7 @@
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="contextAction('rename')">重命名</div>
         <div class="context-menu-item" onclick="contextAction('touch')">修改时间</div>
+        <div class="context-menu-item" onclick="contextAction('chmod')">修改权限</div>
         <div class="context-menu-item" onclick="contextAction('info')">属性</div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" style="color:#dc3545" onclick="contextAction('delete')">删除</div>
@@ -1082,6 +1146,9 @@
                 case 'touch':
                     touchFile(item.path, item.mtime);
                     break;
+                case 'chmod':
+                    openChmodModal(item.path);
+                    break;
                 case 'info':
                     showItemInfo(item.path);
                     break;
@@ -1157,6 +1224,83 @@
             }
         }
 
+        // 打开权限修改模态框
+        function openChmodModal(path) {
+            state.chmodPath = path;
+            document.getElementById('chmodPath').textContent = path;
+            document.getElementById('chmodMode').value = '';
+            document.getElementById('chmodOS').value = 'unix';
+            document.getElementById('chmodWinMode').value = 'readonly';
+            document.getElementById('chmodUser').value = '';
+            updateChmodOptions();
+            document.getElementById('chmodModal').classList.add('active');
+        }
+
+        // 更新chmod选项显示
+        function updateChmodOptions() {
+            const os = document.getElementById('chmodOS').value;
+            document.getElementById('chmodUnixOptions').style.display = os === 'unix' ? 'block' : 'none';
+            document.getElementById('chmodWindowsOptions').style.display = os === 'windows' ? 'block' : 'none';
+        }
+
+        // 监听Windows权限模式变化
+        document.getElementById('chmodWinMode').addEventListener('change', function() {
+            document.getElementById('chmodNtfsOptions').style.display = this.value === 'ntfs' ? 'block' : 'none';
+        });
+
+        // 关闭权限模态框
+        function closeChmodModal() {
+            document.getElementById('chmodModal').classList.remove('active');
+            state.chmodPath = null;
+        }
+
+        // 提交权限修改
+        async function submitChmod() {
+            if (!state.chmodPath) {
+                closeChmodModal();
+                return;
+            }
+
+            const os = document.getElementById('chmodOS').value;
+            let params = { path: state.chmodPath };
+
+            if (os === 'unix') {
+                const mode = document.getElementById('chmodMode').value.trim();
+                if (!mode) {
+                    showToast('请输入权限模式', 'error');
+                    return;
+                }
+                if (!/^[0-7]{3,4}$/.test(mode)) {
+                    showToast('权限格式错误，应为3-4位数字(如755)', 'error');
+                    return;
+                }
+                params.mode = mode;
+            } else {
+                const winMode = document.getElementById('chmodWinMode').value;
+                if (winMode === 'ntfs') {
+                    const user = document.getElementById('chmodUser').value.trim();
+                    if (!user) {
+                        showToast('请输入用户或组名', 'error');
+                        return;
+                    }
+                    params.mode = document.getElementById('chmodNtfsMode').value;
+                    params.user = user;
+                } else {
+                    params.mode = winMode;
+                }
+            }
+
+            const result = await apiRequest('chmod', params, 'POST');
+
+            if (result.success) {
+                showToast('权限修改成功');
+                closeChmodModal();
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
         // 重命名
         async function renameItem(oldPath, newPath) {
             const result = await apiRequest('rename', {
@@ -1215,6 +1359,8 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeEditor();
+                closeTimeModal();
+                closeChmodModal();
                 hideContextMenu();
             }
         });
