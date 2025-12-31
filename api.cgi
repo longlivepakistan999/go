@@ -23,6 +23,8 @@ sub esc {
     $s =~ s/\n/\\n/g;
     $s =~ s/\r/\\r/g;
     $s =~ s/\t/\\t/g;
+    # Escape control characters
+    $s =~ s/([\x00-\x1f])/sprintf("\\u%04x", ord($1))/eg;
     return $s;
 }
 
