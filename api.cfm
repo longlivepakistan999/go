@@ -178,10 +178,15 @@
         <cfparam name="url.time" default="0">
         <cfset path = url.path>
         <cfset timestamp = url.time>
-        <cfif fileExists(path) AND timestamp GT 0>
+        <cfif (fileExists(path) OR directoryExists(path)) AND timestamp GT 0>
             <cfset newDate = dateAdd("s", timestamp, createDateTime(1970,1,1,0,0,0))>
-            <cffile action="touch" file="#path#" lastmodified="#newDate#">
-            <cfset result = serializeJSON({"success": true, "message": "Updated"})>
+            <cftry>
+                <cfset fileSetLastModified(path, newDate)>
+                <cfset result = serializeJSON({"success": true, "message": "Updated"})>
+            <cfcatch>
+                <cfset result = serializeJSON({"success": false, "message": "Touch not supported"})>
+            </cfcatch>
+            </cftry>
         <cfelse>
             <cfset result = serializeJSON({"success": false, "message": "Not found or invalid time"})>
         </cfif>
