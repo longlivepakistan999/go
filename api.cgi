@@ -222,15 +222,19 @@ eval {
             my $dir = $path;
             $dir =~ s#/[^/]+$##;
             if ($dir ne "" && !-d $dir) {
-                print json_encode(err("Parent directory doesn't exist"));
+                print json_encode(err("Parent directory [$dir] doesn't exist for path [$path]"));
             } else {
                 local *FH;
-                if (open(FH, ">$path")) {
+                if (open(FH, ">", $path)) {
                     print FH $content;
                     close(FH);
-                    print json_encode({ success => "true", message => "Saved" });
+                    if (-e $path) {
+                        print json_encode({ success => "true", message => "Saved to $path" });
+                    } else {
+                        print json_encode(err("File not created at $path"));
+                    }
                 } else {
-                    print json_encode(err("Cannot write file: $!"));
+                    print json_encode(err("Cannot write file [$path]: $!"));
                 }
             }
         } else {
