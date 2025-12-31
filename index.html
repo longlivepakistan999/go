@@ -956,12 +956,8 @@
         // 点击项目
         function itemClick(item) {
             if (item.is_dir) {
-                if (item.name === '..') {
-                    const parent = state.currentPath.split('/').slice(0, -1).join('/') || '/';
-                    loadDirectory(parent);
-                } else {
-                    loadDirectory(item.path);
-                }
+                // 直接使用后端提供的路径（包括 ".." 的父目录路径）
+                loadDirectory(item.path);
             } else {
                 viewFile(item.path);
             }
@@ -1148,7 +1144,7 @@
                 case 'rename':
                     const newName = prompt('新名称:', item.name);
                     if (newName && newName !== item.name) {
-                        renameItem(item.path, state.currentPath + '/' + newName);
+                        renameItem(item.path, buildPath(state.currentPath, newName));
                     }
                     break;
                 case 'touch':
