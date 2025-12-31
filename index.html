@@ -869,10 +869,13 @@
         // 渲染目录内容
         function renderDirectory(data) {
             const path = data.path;
+            console.log('[renderDirectory] Backend path:', path);
+            console.log('[renderDirectory] Old currentPath:', state.currentPath);
             state.currentPath = path;
+            console.log('[renderDirectory] New currentPath:', state.currentPath);
             document.getElementById('currentPath').textContent = path;
-            document.getElementById('uploadPath').textContent = path + '/';
-            document.getElementById('createPath').textContent = path + '/';
+            document.getElementById('uploadPath').textContent = path;
+            document.getElementById('createPath').textContent = path;
             updatePathNav(path);
 
             const fileList = document.getElementById('fileList');
@@ -1051,8 +1054,12 @@
             }
         }
 
-        // 构建路径，避免双斜杠
+        // 构建路径，避免双斜杠和路径错误拼接
         function buildPath(basePath, name) {
+            // 如果 name 是绝对路径，直接返回（不要拼接）
+            if (name.startsWith('/') || /^[A-Za-z]:/.test(name)) {
+                return name;
+            }
             // 移除末尾斜杠
             const cleanBase = basePath.replace(/[\/\\]+$/, '');
             return cleanBase + '/' + name;
@@ -1086,7 +1093,10 @@
                 return;
             }
 
+            console.log('[createFile] state.currentPath:', state.currentPath);
+            console.log('[createFile] name:', name);
             const path = buildPath(state.currentPath, name);
+            console.log('[createFile] final path:', path);
             const result = await apiRequest('write', { path, content: '' }, 'POST');
 
             if (result.success) {
