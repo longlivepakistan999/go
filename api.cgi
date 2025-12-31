@@ -1,5 +1,5 @@
 #!/usr/bin/perl -w
-# 先输出头，防止任何错误导致 500
+# Print headers first to prevent 500 errors
 print "Content-Type: application/json\n";
 print "Access-Control-Allow-Origin: *\n";
 print "Access-Control-Allow-Methods: GET, POST, OPTIONS\n";
@@ -68,9 +68,9 @@ sub fmt_perm {
     my ($m, $path) = @_;
     $m = 0 unless defined $m;
     my $t = "";
-    # 通过 mode 判断类型
-    if (($m & 0170000) == 0040000) { $t = "d"; }  # 目录
-    elsif (($m & 0170000) == 0120000) { $t = "l"; }  # 符号链接
+    # Check type via mode bits
+    if (($m & 0170000) == 0040000) { $t = "d"; }  # directory
+    elsif (($m & 0170000) == 0120000) { $t = "l"; }  # symlink
     else { $t = "-"; }
     $t .= ($m & 0400) ? "r" : "-";
     $t .= ($m & 0200) ? "w" : "-";
