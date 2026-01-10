@@ -1,0 +1,34 @@
+# Caddy 反向代理配置 - HTML 内容注入
+# Caddy 会自动处理 HTTPS 证书
+
+your-domain.com {
+    reverse_proxy localhost:8080 {
+        # 移除后端压缩
+        header_up Accept-Encoding ""
+    }
+
+    # 使用 response_body 插件进行内容替换
+    # 需要安装: xcaddy build --with github.com/caddyserver/replace-response
+
+    # 在 <body> 后注入内容
+    replace {
+        re "<body[^>]*>" "$0<div style='background:#fffbe6;border-bottom:2px solid #ffe58f;padding:10px;text-align:center;'><b>此网址属于 XXX 拥有</b></div>"
+    }
+}
+
+# 多个网站统一配置
+(inject_banner) {
+    replace {
+        re "<body[^>]*>" "$0<div style='background:#fffbe6;border-bottom:2px solid #ffe58f;padding:10px;text-align:center;'><b>此网址属于 XXX 拥有</b></div>"
+    }
+}
+
+site1.com {
+    reverse_proxy localhost:8081
+    import inject_banner
+}
+
+site2.com {
+    reverse_proxy localhost:8082
+    import inject_banner
+}
