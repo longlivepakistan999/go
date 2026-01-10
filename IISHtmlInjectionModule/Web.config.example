@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  IIS 配置示例
+  将此配置添加到您网站的 Web.config 文件中
+-->
+<configuration>
+  <system.webServer>
+    <modules>
+      <!-- 添加 HTML 注入模块 -->
+      <add name="HtmlInjectionModule"
+           type="IISHtmlInjectionModule.HtmlInjectionModule, IISHtmlInjectionModule"
+           preCondition="managedHandler" />
+    </modules>
+  </system.webServer>
+</configuration>
