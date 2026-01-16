@@ -38,6 +38,7 @@ type Task struct {
 	Output      string    `json:"output"`       // 完整输出
 	Vulnerable  bool      `json:"vulnerable"`   // 是否存在漏洞
 	DBMS        string    `json:"dbms"`         // 数据库类型
+	IsDBA       *bool     `json:"is_dba"`       // 是否为 DBA
 	CreatedAt   time.Time `json:"created_at"`
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
@@ -102,6 +103,7 @@ func (app *App) initDB() error {
 		output TEXT,
 		vulnerable INTEGER DEFAULT 0,
 		dbms TEXT,
+		is_dba INTEGER,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		started_at DATETIME,
 		finished_at DATETIME
@@ -137,17 +139,18 @@ func (app *App) GetTask(id string) (*Task, error) {
 	task := &Task{}
 	var startedAt, finishedAt sql.NullTime
 	var vulnerable int
+	var isDBA sql.NullInt64
 
 	err := app.db.QueryRow(`
 		SELECT id, name, request, target, method, data, cookies, headers, options,
 		       status, COALESCE(result,''), COALESCE(output,''), vulnerable, COALESCE(dbms,''),
-		       created_at, started_at, finished_at
+		       is_dba, created_at, started_at, finished_at
 		FROM tasks WHERE id = ?
 	`, id).Scan(
 		&task.ID, &task.Name, &task.Request, &task.Target, &task.Method,
 		&task.Data, &task.Cookies, &task.Headers, &task.Options,
 		&task.Status, &task.Result, &task.Output, &vulnerable, &task.DBMS,
-		&task.CreatedAt, &startedAt, &finishedAt,
+		&isDBA, &task.CreatedAt, &startedAt, &finishedAt,
 	)
 
 	if err != nil {
@@ -155,6 +158,10 @@ func (app *App) GetTask(id string) (*Task, error) {
 	}
 
 	task.Vulnerable = vulnerable == 1
+	if isDBA.Valid {
+		val := isDBA.Int64 == 1
+		task.IsDBA = &val
+	}
 	if startedAt.Valid {
 		task.StartedAt = &startedAt.Time
 	}
@@ -171,7 +178,7 @@ func (app *App) GetTasks(limit, offset int) ([]*Task, int, error) {
 	app.db.QueryRow("SELECT COUNT(*) FROM tasks").Scan(&total)
 
 	rows, err := app.db.Query(`
-		SELECT id, name, target, method, status, vulnerable, COALESCE(dbms,''), created_at, finished_at
+		SELECT id, name, target, method, status, vulnerable, COALESCE(dbms,''), is_dba, created_at, finished_at
 		FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -184,14 +191,19 @@ func (app *App) GetTasks(limit, offset int) ([]*Task, int, error) {
 		task := &Task{}
 		var finishedAt sql.NullTime
 		var vulnerable int
+		var isDBA sql.NullInt64
 
 		err := rows.Scan(&task.ID, &task.Name, &task.Target, &task.Method,
-			&task.Status, &vulnerable, &task.DBMS, &task.CreatedAt, &finishedAt)
+			&task.Status, &vulnerable, &task.DBMS, &isDBA, &task.CreatedAt, &finishedAt)
 		if err != nil {
 			continue
 		}
 
 		task.Vulnerable = vulnerable == 1
+		if isDBA.Valid {
+			val := isDBA.Int64 == 1
+			task.IsDBA = &val
+		}
 		if finishedAt.Valid {
 			task.FinishedAt = &finishedAt.Time
 		}
@@ -208,11 +220,20 @@ func (app *App) UpdateTask(task *Task) error {
 		vulnerable = 1
 	}
 
+	var isDBA *int
+	if task.IsDBA != nil {
+		val := 0
+		if *task.IsDBA {
+			val = 1
+		}
+		isDBA = &val
+	}
+
 	_, err := app.db.Exec(`
-		UPDATE tasks SET status=?, result=?, output=?, vulnerable=?, dbms=?,
+		UPDATE tasks SET status=?, result=?, output=?, vulnerable=?, dbms=?, is_dba=?,
 		                 started_at=?, finished_at=?
 		WHERE id=?
-	`, task.Status, task.Result, task.Output, vulnerable, task.DBMS,
+	`, task.Status, task.Result, task.Output, vulnerable, task.DBMS, isDBA,
 		task.StartedAt, task.FinishedAt, task.ID)
 
 	return err
@@ -316,6 +337,7 @@ func (app *App) processTask(taskID string) {
 	args := []string{
 		"--batch",
 		"--flush-session",
+		"--is-dba",
 		"--output-dir=" + app.workDir,
 	}
 
@@ -407,6 +429,15 @@ func (app *App) processTask(taskID string) {
 			if end != -1 {
 				task.DBMS = strings.TrimSpace(outputStr[idx+14 : idx+end])
 			}
+		}
+
+		// 检测是否为 DBA
+		if strings.Contains(outputStr, "current user is DBA: True") {
+			val := true
+			task.IsDBA = &val
+		} else if strings.Contains(outputStr, "current user is DBA: False") {
+			val := false
+			task.IsDBA = &val
 		}
 	} else if strings.Contains(outputStr, "all tested parameters do not appear to be injectable") {
 		task.Status = "failed"
@@ -739,6 +770,17 @@ const indexHTML = `<!DOCTYPE html>
             border-radius: 3px;
             font-size: 10px;
             margin-top: 5px;
+            margin-right: 5px;
+        }
+        .task-dba {
+            display: inline-block;
+            background: #ff5722;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-top: 5px;
+            font-weight: bold;
         }
 
         .detail-panel { display: none; }
@@ -973,6 +1015,10 @@ username=admin&password=123"></textarea>
                 'failed': '安全'
             };
 
+            let badges = '';
+            if (task.dbms) badges += ` + "`" + `<span class="task-dbms">${task.dbms}</span>` + "`" + `;
+            if (task.is_dba === true) badges += ` + "`" + `<span class="task-dba">DBA</span>` + "`" + `;
+
             return ` + "`" + `
                 <div class="task-item ${task.status}" onclick="selectTask('${task.id}')">
                     <div class="task-header">
@@ -980,7 +1026,7 @@ username=admin&password=123"></textarea>
                         <span class="task-status ${task.status}">${statusText[task.status] || task.status}</span>
                     </div>
                     <div class="task-target">${task.target || 'N/A'}</div>
-                    ${task.dbms ? ` + "`" + `<span class="task-dbms">${task.dbms}</span>` + "`" + ` : ''}
+                    ${badges}
                     <div class="task-time">${new Date(task.created_at).toLocaleString()}</div>
                 </div>
             ` + "`" + `;
@@ -1023,8 +1069,14 @@ username=admin&password=123"></textarea>
 
             if (task.status === 'success' && task.vulnerable) {
                 resultBox.className = 'result-box vulnerable';
-                resultText.innerHTML = '🔴 <strong>发现 SQL 注入漏洞!</strong>' +
-                    (task.dbms ? '<br>数据库类型: ' + task.dbms : '');
+                let info = '🔴 <strong>发现 SQL 注入漏洞!</strong>';
+                if (task.dbms) info += '<br>📦 数据库类型: <strong>' + task.dbms + '</strong>';
+                if (task.is_dba === true) {
+                    info += '<br>👑 <span style="color:#ff5722;font-weight:bold;">DBA 权限: 是</span>';
+                } else if (task.is_dba === false) {
+                    info += '<br>👤 DBA 权限: 否';
+                }
+                resultText.innerHTML = info;
             } else if (task.status === 'failed') {
                 resultBox.className = 'result-box safe';
                 resultText.innerHTML = '🟢 ' + (task.result || '未发现漏洞');
