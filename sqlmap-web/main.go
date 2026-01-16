@@ -752,6 +752,25 @@ const indexHTML = `<!DOCTYPE html>
         .task-status.running { background: #ff9800; color: #000; }
         .task-status.pending { background: #2196f3; color: #fff; }
 
+        .filter-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 6px 12px;
+            background: #0f0f23;
+            border: 1px solid #333;
+            border-radius: 5px;
+            color: #888;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover { border-color: #00d4ff; color: #00d4ff; }
+        .filter-btn.active { background: #00d4ff; color: #000; border-color: #00d4ff; }
+
         .task-target {
             font-size: 12px;
             color: #888;
@@ -909,6 +928,13 @@ username=admin&password=123"></textarea>
 
                 <div class="panel" style="margin-top: 20px;">
                     <h2>📋 任务列表</h2>
+                    <div class="filter-tabs">
+                        <button class="filter-btn active" data-filter="all">全部</button>
+                        <button class="filter-btn" data-filter="success">有漏洞</button>
+                        <button class="filter-btn" data-filter="failed">安全</button>
+                        <button class="filter-btn" data-filter="running">运行中</button>
+                        <button class="filter-btn" data-filter="pending">等待中</button>
+                    </div>
                     <div class="task-list" id="task-list">
                         <div class="empty-state">暂无任务</div>
                     </div>
@@ -992,18 +1018,34 @@ username=admin&password=123"></textarea>
             document.getElementById('stat-failed').textContent = stats.failed;
         }
 
+        // 当前筛选状态
+        let currentFilter = 'all';
+        let allTasks = [];
+
         // 加载任务列表
         async function loadTasks() {
             const res = await fetch('/api/tasks');
             const data = await res.json();
-            const list = document.getElementById('task-list');
+            allTasks = data.tasks || [];
+            renderTasks();
+        }
 
-            if (!data.tasks || data.tasks.length === 0) {
-                list.innerHTML = '<div class="empty-state">暂无任务</div>';
+        // 渲染任务列表（带筛选）
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            let tasks = allTasks;
+
+            if (currentFilter !== 'all') {
+                tasks = allTasks.filter(t => t.status === currentFilter);
+            }
+
+            if (tasks.length === 0) {
+                const msg = currentFilter === 'all' ? '暂无任务' : '没有符合条件的任务';
+                list.innerHTML = '<div class="empty-state">' + msg + '</div>';
                 return;
             }
 
-            list.innerHTML = data.tasks.map(task => createTaskItem(task)).join('');
+            list.innerHTML = tasks.map(task => createTaskItem(task)).join('');
         }
 
         // 创建任务项 HTML
@@ -1034,17 +1076,16 @@ username=admin&password=123"></textarea>
 
         // 更新列表中的任务
         function updateTaskInList(task) {
-            const list = document.getElementById('task-list');
-            const existing = list.querySelector(` + "`" + `[onclick="selectTask('${task.id}')"]` + "`" + `);
-
-            if (existing) {
-                existing.outerHTML = createTaskItem(task);
+            // 更新 allTasks 数组
+            const idx = allTasks.findIndex(t => t.id === task.id);
+            if (idx >= 0) {
+                allTasks[idx] = task;
             } else {
-                if (list.querySelector('.empty-state')) {
-                    list.innerHTML = '';
-                }
-                list.insertAdjacentHTML('afterbegin', createTaskItem(task));
+                allTasks.unshift(task);
             }
+
+            // 重新渲染（保持筛选状态）
+            renderTasks();
         }
 
         // 选择任务
@@ -1138,6 +1179,16 @@ username=admin&password=123"></textarea>
                 document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
+            };
+        });
+
+        // 筛选按钮
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderTasks();
             };
         });
 
