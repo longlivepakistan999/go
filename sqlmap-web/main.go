@@ -566,7 +566,7 @@ func (app *App) Start(addr string) error {
 func main() {
 	addr := flag.String("addr", ":8080", "监听地址")
 	sqlmapPath := flag.String("sqlmap", "sqlmap", "SQLMap 路径")
-	workers := flag.Int("workers", 3, "并发工作数")
+	workers := flag.Int("workers", 2, "并发工作数（最大同时执行数）")
 	dbPath := flag.String("db", "sqlmap-web.db", "数据库路径")
 	workDir := flag.String("workdir", "./output", "工作目录")
 	flag.Parse()

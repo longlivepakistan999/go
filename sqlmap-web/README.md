@@ -40,7 +40,7 @@ go build -o sqlmap-web
 |------|------|--------|
 | `-addr` | 监听地址 | `:8080` |
 | `-sqlmap` | SQLMap 路径 | `sqlmap` |
-| `-workers` | 并发工作数 | `3` |
+| `-workers` | 最大同时执行数 | `2` |
 | `-db` | 数据库路径 | `sqlmap-web.db` |
 | `-workdir` | 工作目录 | `./output` |
 
