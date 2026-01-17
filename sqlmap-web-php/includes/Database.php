@@ -51,10 +51,10 @@ class Database
                 options TEXT,
                 status TEXT DEFAULT 'pending',
                 result TEXT,
-                output TEXT,
                 vulnerable INTEGER DEFAULT 0,
                 dbms TEXT,
                 is_dba INTEGER,
+                log_file TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 started_at DATETIME,
                 finished_at DATETIME

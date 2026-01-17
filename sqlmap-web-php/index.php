@@ -67,6 +67,14 @@ if (strpos($uri, '/api/') === 0) {
             exit;
         }
 
+        // POST /api/cleanup - 清理旧日志
+        if ($apiPath === '/cleanup' && $method === 'POST') {
+            $days = isset($_GET['days']) ? (int)$_GET['days'] : 7;
+            $count = $taskModel->cleanup($days);
+            echo json_encode(['ok' => true, 'deleted' => $count, 'days' => $days]);
+            exit;
+        }
+
         // 404
         http_response_code(404);
         echo json_encode(['error' => 'Not found']);

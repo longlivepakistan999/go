@@ -42,6 +42,13 @@ function processTask($task, $config)
         'started_at' => date('Y-m-d H:i:s')
     ]);
 
+    // 创建日志目录：logs/2024-01-16/
+    $logsDir = $config['work_dir'] . '/logs/' . date('Y-m-d');
+    if (!is_dir($logsDir)) {
+        mkdir($logsDir, 0755, true);
+    }
+    $logFile = $logsDir . '/' . $task['id'] . '.log';
+
     // 准备请求文件
     $reqFile = null;
     if (!empty($task['request'])) {
@@ -91,14 +98,17 @@ function processTask($task, $config)
     exec($cmd, $output, $returnCode);
     $outputStr = implode("\n", $output);
 
+    // 写入日志文件（不存数据库）
+    file_put_contents($logFile, $outputStr);
+
     // 清理请求文件
     if ($reqFile && file_exists($reqFile)) {
         unlink($reqFile);
     }
 
-    // 分析结果
+    // 分析结果（不存 output 到数据库，只存日志文件路径）
     $result = [
-        'output' => $outputStr,
+        'log_file' => $logFile,
         'finished_at' => date('Y-m-d H:i:s'),
         'status' => 'failed',
         'vulnerable' => 0,

@@ -39,6 +39,7 @@ type Task struct {
 	Vulnerable  bool      `json:"vulnerable"`   // 是否存在漏洞
 	DBMS        string    `json:"dbms"`         // 数据库类型
 	IsDBA       *bool     `json:"is_dba"`       // 是否为 DBA
+	LogFile     string    `json:"log_file"`     // 日志文件路径
 	CreatedAt   time.Time `json:"created_at"`
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
@@ -104,6 +105,7 @@ func (app *App) initDB() error {
 		vulnerable INTEGER DEFAULT 0,
 		dbms TEXT,
 		is_dba INTEGER,
+		log_file TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		started_at DATETIME,
 		finished_at DATETIME
@@ -140,17 +142,18 @@ func (app *App) GetTask(id string) (*Task, error) {
 	var startedAt, finishedAt sql.NullTime
 	var vulnerable int
 	var isDBA sql.NullInt64
+	var logFile sql.NullString
 
 	err := app.db.QueryRow(`
 		SELECT id, name, request, target, method, data, cookies, headers, options,
-		       status, COALESCE(result,''), COALESCE(output,''), vulnerable, COALESCE(dbms,''),
-		       is_dba, created_at, started_at, finished_at
+		       status, COALESCE(result,''), vulnerable, COALESCE(dbms,''),
+		       is_dba, COALESCE(log_file,''), created_at, started_at, finished_at
 		FROM tasks WHERE id = ?
 	`, id).Scan(
 		&task.ID, &task.Name, &task.Request, &task.Target, &task.Method,
 		&task.Data, &task.Cookies, &task.Headers, &task.Options,
-		&task.Status, &task.Result, &task.Output, &vulnerable, &task.DBMS,
-		&isDBA, &task.CreatedAt, &startedAt, &finishedAt,
+		&task.Status, &task.Result, &vulnerable, &task.DBMS,
+		&isDBA, &logFile, &task.CreatedAt, &startedAt, &finishedAt,
 	)
 
 	if err != nil {
@@ -161,6 +164,13 @@ func (app *App) GetTask(id string) (*Task, error) {
 	if isDBA.Valid {
 		val := isDBA.Int64 == 1
 		task.IsDBA = &val
+	}
+	if logFile.Valid {
+		task.LogFile = logFile.String
+		// 从文件读取输出日志
+		if content, err := os.ReadFile(task.LogFile); err == nil {
+			task.Output = string(content)
+		}
 	}
 	if startedAt.Valid {
 		task.StartedAt = &startedAt.Time
@@ -178,7 +188,7 @@ func (app *App) GetTasks(limit, offset int) ([]*Task, int, error) {
 	app.db.QueryRow("SELECT COUNT(*) FROM tasks").Scan(&total)
 
 	rows, err := app.db.Query(`
-		SELECT id, name, target, method, status, vulnerable, COALESCE(dbms,''), is_dba, created_at, finished_at
+		SELECT id, name, target, method, status, vulnerable, COALESCE(dbms,''), is_dba, COALESCE(log_file,''), created_at, finished_at
 		FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?
 	`, limit, offset)
 	if err != nil {
@@ -192,9 +202,10 @@ func (app *App) GetTasks(limit, offset int) ([]*Task, int, error) {
 		var finishedAt sql.NullTime
 		var vulnerable int
 		var isDBA sql.NullInt64
+		var logFile sql.NullString
 
 		err := rows.Scan(&task.ID, &task.Name, &task.Target, &task.Method,
-			&task.Status, &vulnerable, &task.DBMS, &isDBA, &task.CreatedAt, &finishedAt)
+			&task.Status, &vulnerable, &task.DBMS, &isDBA, &logFile, &task.CreatedAt, &finishedAt)
 		if err != nil {
 			continue
 		}
@@ -203,6 +214,9 @@ func (app *App) GetTasks(limit, offset int) ([]*Task, int, error) {
 		if isDBA.Valid {
 			val := isDBA.Int64 == 1
 			task.IsDBA = &val
+		}
+		if logFile.Valid {
+			task.LogFile = logFile.String
 		}
 		if finishedAt.Valid {
 			task.FinishedAt = &finishedAt.Time
@@ -230,19 +244,66 @@ func (app *App) UpdateTask(task *Task) error {
 	}
 
 	_, err := app.db.Exec(`
-		UPDATE tasks SET status=?, result=?, output=?, vulnerable=?, dbms=?, is_dba=?,
+		UPDATE tasks SET status=?, result=?, vulnerable=?, dbms=?, is_dba=?, log_file=?,
 		                 started_at=?, finished_at=?
 		WHERE id=?
-	`, task.Status, task.Result, task.Output, vulnerable, task.DBMS, isDBA,
+	`, task.Status, task.Result, vulnerable, task.DBMS, isDBA, task.LogFile,
 		task.StartedAt, task.FinishedAt, task.ID)
 
 	return err
 }
 
-// DeleteTask 删除任务
+// DeleteTask 删除任务及其日志文件
 func (app *App) DeleteTask(id string) error {
+	// 先获取日志文件路径
+	task, _ := app.GetTask(id)
+	if task != nil && task.LogFile != "" {
+		os.Remove(task.LogFile)
+	}
+
 	_, err := app.db.Exec("DELETE FROM tasks WHERE id=?", id)
 	return err
+}
+
+// CleanupOldLogs 清理指定天数之前的日志
+func (app *App) CleanupOldLogs(days int) (int, error) {
+	cutoff := time.Now().AddDate(0, 0, -days)
+
+	// 获取旧任务
+	rows, err := app.db.Query(`
+		SELECT id, log_file FROM tasks
+		WHERE finished_at < ? AND log_file IS NOT NULL
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var id, logFile string
+		rows.Scan(&id, &logFile)
+		if logFile != "" {
+			os.Remove(logFile)
+		}
+		app.db.Exec("DELETE FROM tasks WHERE id=?", id)
+		count++
+	}
+
+	// 清理空的日期目录
+	logsDir := filepath.Join(app.workDir, "logs")
+	entries, _ := os.ReadDir(logsDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			dirPath := filepath.Join(logsDir, entry.Name())
+			subEntries, _ := os.ReadDir(dirPath)
+			if len(subEntries) == 0 {
+				os.Remove(dirPath)
+			}
+		}
+	}
+
+	return count, nil
 }
 
 // ParseRequest 解析 HTTP 请求包
@@ -360,6 +421,16 @@ func (app *App) processTask(taskID string) {
 		args = append(args, extraArgs...)
 	}
 
+	// 创建日志目录
+	logsDir := filepath.Join(app.workDir, "logs")
+	os.MkdirAll(logsDir, 0755)
+
+	// 日志文件路径：logs/2024-01-16/task-id.log
+	dateDir := filepath.Join(logsDir, time.Now().Format("2006-01-02"))
+	os.MkdirAll(dateDir, 0755)
+	logFile := filepath.Join(dateDir, task.ID+".log")
+	task.LogFile = logFile
+
 	// 执行 SQLMap
 	cmd := exec.Command(app.sqlmapPath, args...)
 	cmd.Dir = app.workDir
@@ -378,7 +449,11 @@ func (app *App) processTask(taskID string) {
 		return
 	}
 
-	// 读取输出
+	// 打开日志文件
+	logFileHandle, _ := os.Create(logFile)
+	defer logFileHandle.Close()
+
+	// 读取输出并写入文件
 	var output strings.Builder
 	go func() {
 		reader := bufio.NewReader(stdout)
@@ -388,6 +463,7 @@ func (app *App) processTask(taskID string) {
 				break
 			}
 			output.WriteString(line)
+			logFileHandle.WriteString(line) // 写入日志文件
 
 			// 实时广播输出
 			app.broadcast(map[string]interface{}{
@@ -400,7 +476,15 @@ func (app *App) processTask(taskID string) {
 
 	// 读取错误输出
 	go func() {
-		io.Copy(&output, stderr)
+		buf := make([]byte, 1024)
+		for {
+			n, err := stderr.Read(buf)
+			if err != nil {
+				break
+			}
+			output.Write(buf[:n])
+			logFileHandle.Write(buf[:n]) // 写入日志文件
+		}
 	}()
 
 	// 等待完成
@@ -409,9 +493,8 @@ func (app *App) processTask(taskID string) {
 	// 清理请求文件
 	os.Remove(reqFile)
 
-	// 分析结果
+	// 分析结果（从内存中的输出分析，不再存数据库）
 	outputStr := output.String()
-	task.Output = outputStr
 	finished := time.Now()
 	task.FinishedAt = &finished
 
@@ -536,6 +619,23 @@ func (app *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"success": success,
 			"failed":  failed,
 			"total":   pending + running + success + failed,
+		})
+
+	case path == "/cleanup" && r.Method == "POST":
+		// 清理指定天数之前的日志，默认 7 天
+		days := 7
+		if d := r.URL.Query().Get("days"); d != "" {
+			fmt.Sscanf(d, "%d", &days)
+		}
+		count, err := app.CleanupOldLogs(days)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":      true,
+			"deleted": count,
+			"days":    days,
 		})
 
 	default:

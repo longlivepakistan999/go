@@ -138,6 +138,13 @@ class Task
         if ($task) {
             $task['vulnerable'] = (bool)$task['vulnerable'];
             $task['is_dba'] = $task['is_dba'] === null ? null : (bool)$task['is_dba'];
+
+            // 从日志文件读取输出
+            if (!empty($task['log_file']) && file_exists($task['log_file'])) {
+                $task['output'] = file_get_contents($task['log_file']);
+            } else {
+                $task['output'] = '';
+            }
         }
 
         return $task;
@@ -208,12 +215,61 @@ class Task
     }
 
     /**
-     * 删除任务
+     * 删除任务及其日志文件
      */
     public function delete($id)
     {
+        // 先获取日志文件路径
+        $task = $this->get($id);
+        if ($task && !empty($task['log_file']) && file_exists($task['log_file'])) {
+            unlink($task['log_file']);
+        }
+
         $stmt = $this->db->prepare("DELETE FROM tasks WHERE id = ?");
         return $stmt->execute([$id]);
+    }
+
+    /**
+     * 清理指定天数之前的任务和日志
+     */
+    public function cleanup($days = 7)
+    {
+        $cutoff = date('Y-m-d H:i:s', strtotime("-$days days"));
+
+        // 获取旧任务
+        $stmt = $this->db->prepare("
+            SELECT id, log_file FROM tasks
+            WHERE finished_at < ? AND log_file IS NOT NULL
+        ");
+        $stmt->execute([$cutoff]);
+        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $count = 0;
+        foreach ($tasks as $task) {
+            if (!empty($task['log_file']) && file_exists($task['log_file'])) {
+                unlink($task['log_file']);
+            }
+            $this->db->exec("DELETE FROM tasks WHERE id = '{$task['id']}'");
+            $count++;
+        }
+
+        // 清理空的日期目录
+        $config = require __DIR__ . '/../config.php';
+        $logsDir = $config['work_dir'] . '/logs';
+        if (is_dir($logsDir)) {
+            foreach (scandir($logsDir) as $entry) {
+                if ($entry === '.' || $entry === '..') continue;
+                $dirPath = "$logsDir/$entry";
+                if (is_dir($dirPath)) {
+                    $files = array_diff(scandir($dirPath), ['.', '..']);
+                    if (empty($files)) {
+                        rmdir($dirPath);
+                    }
+                }
+            }
+        }
+
+        return $count;
     }
 
     /**
