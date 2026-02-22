@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>远程文件管理器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+
+        /* 连接面板 */
+        .connect-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .connect-panel.hidden { display: none; }
+        .connect-box {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 400px;
+            max-width: 90%;
+        }
+        .connect-box h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        .connect-box .form-group {
+            margin-bottom: 20px;
+        }
+        .connect-box label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        .connect-box input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .connect-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .connect-box .btn-connect {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .connect-box .btn-connect:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .connect-box .error {
+            color: #dc3545;
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .connect-box .saved-servers {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .connect-box .saved-servers h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .server-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .server-item:hover { background: #e9ecef; }
+        .server-item .server-url { flex: 1; font-size: 13px; color: #333; }
+        .server-item .server-delete {
+            color: #dc3545;
+            padding: 5px;
+            cursor: pointer;
+        }
+
+        /* 主界面 */
+        .main-app { display: none; }
+        .main-app.active { display: block; }
+
+        /* 头部 */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .header h1 { font-size: 20px; }
+        .header-actions { display: flex; gap: 10px; }
+        .header-actions button {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .header-actions button:hover { background: rgba(255,255,255,0.3); }
+        .header-info {
+            background: rgba(0,0,0,0.2);
+            padding: 8px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .header-info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .header-info-item .label {
+            color: rgba(255,255,255,0.7);
+        }
+        .header-info-item .value {
+            color: #fff;
+            font-weight: 500;
+        }
+        .header-path {
+            background: rgba(255,255,255,0.15);
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-family: monospace;
+        }
+        .current-path {
+            display: none;
+        }
+        .path-nav { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+        .path-nav a {
+            color: #fff;
+            text-decoration: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            transition: background 0.2s;
+        }
+        .path-nav a:hover { background: rgba(255,255,255,0.25); }
+        .path-nav .sep { color: rgba(255,255,255,0.6); font-size: 14px; margin: 0 2px; }
+
+        /* 工具栏 */
+        .toolbar {
+            background: white;
+            padding: 15px 20px;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .toolbar-group {
+            flex: 1;
+            min-width: 250px;
+        }
+        .toolbar-group label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .toolbar-group code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #667eea;
+        }
+        .toolbar-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .toolbar input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        .toolbar input[type="file"] {
+            flex: 1;
+            font-size: 13px;
+        }
+        .toolbar button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+
+        /* 文件列表 */
+        .file-container {
+            margin: 0 20px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .file-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .file-table th, .file-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .file-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+        }
+        .file-table tr:hover { background: #f8f9fa; }
+        .file-table .name-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .file-table .icon { font-size: 18px; }
+        .file-table .name { color: #333; }
+        .file-table .name:hover { color: #667eea; }
+        .file-table .perms {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        .file-table .size, .file-table .time {
+            font-size: 13px;
+            color: #666;
+        }
+        .file-table .actions { white-space: nowrap; }
+        .file-table .actions button {
+            padding: 4px 10px;
+            margin: 0 2px;
+            font-size: 12px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-right: 3px;
+        }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-primary { background: #cce5ff; color: #004085; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+
+        /* 编辑器模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 { font-size: 18px; color: #333; }
+        .modal-header .close {
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+        .modal-body {
+            padding: 20px;
+            flex: 1;
+            overflow: auto;
+        }
+        .modal-body textarea {
+            width: 100%;
+            height: 400px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+        }
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* 时间编辑表单 */
+        .time-edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .time-edit-path {
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #495057;
+            word-break: break-all;
+        }
+        .time-edit-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .time-edit-group label {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+        .time-edit-group input {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .time-edit-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .time-edit-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            color: white;
+        }
+        .time-edit-preview .label {
+            font-weight: 500;
+        }
+        .time-edit-preview .value {
+            font-family: monospace;
+            font-size: 15px;
+        }
+
+        /* 消息提示 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        .toast.success { background: #28a745; }
+        .toast.error { background: #dc3545; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 加载中 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        /* 右键菜单 */
+        .context-menu {
+            display: none;
+            position: fixed;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            min-width: 150px;
+            z-index: 1000;
+            overflow: hidden;
+        }
+        .context-menu.active { display: block; }
+        .context-menu-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .context-menu-item:hover { background: #f0f2f5; }
+        .context-menu-divider {
+            height: 1px;
+            background: #eee;
+            margin: 5px 0;
+        }
+
+        @media (max-width: 768px) {
+            .toolbar { flex-direction: column; }
+            .toolbar-group { min-width: 100%; }
+            .header-top { flex-direction: column; gap: 10px; }
+            .file-table { font-size: 12px; }
+            .file-table th, .file-table td { padding: 8px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 连接面板 -->
+    <div class="connect-panel" id="connectPanel">
+        <div class="connect-box">
+            <h1>远程文件管理器</h1>
+            <div class="form-group">
+                <label>服务器地址</label>
+                <input type="text" id="serverUrl" placeholder="https://example.com/api.php">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="serverPassword" placeholder="输入密码">
+            </div>
+            <button class="btn-connect" onclick="connect()">连接</button>
+            <div class="error" id="connectError"></div>
+            <div class="saved-servers" id="savedServers"></div>
+        </div>
+    </div>
+
+    <!-- 主应用 -->
+    <div class="main-app" id="mainApp">
+        <div class="header">
+            <div class="header-top">
+                <h1>远程文件管理器</h1>
+                <div class="header-actions">
+                    <button onclick="disconnect()">断开连接</button>
+                </div>
+            </div>
+            <div class="header-info" id="headerInfo">
+                <div class="header-info-item"><span class="label">用户:</span><span class="value" id="infoUser">-</span></div>
+                <div class="header-info-item"><span class="label">PHP:</span><span class="value" id="infoPhp">-</span></div>
+                <div class="header-info-item"><span class="label">服务器:</span><span class="value" id="infoServer">-</span></div>
+                <div class="header-info-item"><span class="label">磁盘:</span><span class="value" id="infoDisk">-</span></div>
+                <div class="header-info-item"><span class="label">上传限制:</span><span class="value" id="infoUpload">-</span></div>
+            </div>
+            <div class="header-path">
+                <span class="current-path" id="currentPath">/</span>
+                <div class="path-nav" id="pathNav"></div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-group">
+                <label>上传到: <code id="uploadPath"></code></label>
+                <div class="toolbar-row">
+                    <input type="file" id="uploadFile">
+                    <button class="btn-primary" onclick="uploadFile()">上传</button>
+                </div>
+            </div>
+            <div class="toolbar-group">
+                <label>创建到: <code id="createPath"></code></label>
+                <div class="toolbar-row">
+                    <input type="text" id="newName" placeholder="名称">
+                    <button class="btn-success" onclick="createDir()">创建目录</button>
+                    <button class="btn-primary" onclick="createFile()">创建文件</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="file-container">
+            <table class="file-table">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>大小</th>
+                        <th>权限</th>
+                        <th>修改时间</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="fileList"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 编辑器模态框 -->
+    <div class="modal" id="editorModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="editorTitle">编辑文件</h2>
+                <span class="close" onclick="closeEditor()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <textarea id="editorContent"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeEditor()">取消</button>
+                <button class="btn-success" onclick="saveFile()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 时间修改模态框 -->
+    <div class="modal" id="timeModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>修改时间</h2>
+                <span class="close" onclick="closeTimeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="time-edit-form">
+                    <div class="time-edit-path" id="timeEditPath"></div>
+                    <div class="time-edit-group">
+                        <label>日期</label>
+                        <input type="date" id="timeEditDate">
+                    </div>
+                    <div class="time-edit-group">
+                        <label>时间</label>
+                        <input type="time" id="timeEditTime" step="1">
+                    </div>
+                    <div class="time-edit-preview">
+                        <span class="label">预览:</span>
+                        <span class="value" id="timePreview">-</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeTimeModal()">取消</button>
+                <button class="btn-success" onclick="submitTimeChange()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 权限修改模态框 -->
+    <div class="modal" id="chmodModal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>修改权限</h2>
+                <span class="close" onclick="closeChmodModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="time-edit-form">
+                    <div class="time-edit-path" id="chmodPath"></div>
+                    <div class="time-edit-group">
+                        <label>系统类型</label>
+                        <select id="chmodOS" onchange="updateChmodOptions()" style="padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <option value="unix">Linux/Unix</option>
+                            <option value="windows">Windows</option>
+                        </select>
+                    </div>
+                    <div id="chmodUnixOptions">
+                        <div class="time-edit-group">
+                            <label>权限模式 (如: 755, 644)</label>
+                            <input type="text" id="chmodMode" placeholder="755" maxlength="4">
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                            常用: 755(rwxr-xr-x), 644(rw-r--r--), 777(rwxrwxrwx)
+                        </div>
+                    </div>
+                    <div id="chmodWindowsOptions" style="display: none;">
+                        <div class="time-edit-group">
+                            <label>属性操作</label>
+                            <select id="chmodWinMode" style="padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                <option value="readonly">设为只读</option>
+                                <option value="normal">取消只读</option>
+                                <option value="hidden">设为隐藏</option>
+                                <option value="visible">取消隐藏</option>
+                                <option value="ntfs">NTFS权限</option>
+                            </select>
+                        </div>
+                        <div id="chmodNtfsOptions" style="display: none; margin-top: 15px;">
+                            <div class="time-edit-group">
+                                <label>用户/组</label>
+                                <input type="text" id="chmodUser" placeholder="Everyone 或 Users">
+                            </div>
+                            <div class="time-edit-group">
+                                <label>权限级别</label>
+                                <select id="chmodNtfsMode" style="padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                    <option value="F">完全控制 (F)</option>
+                                    <option value="M">修改 (M)</option>
+                                    <option value="RX">读取和执行 (RX)</option>
+                                    <option value="R">读取 (R)</option>
+                                    <option value="W">写入 (W)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeChmodModal()">取消</button>
+                <button class="btn-success" onclick="submitChmod()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="contextAction('open')">打开</div>
+        <div class="context-menu-item" onclick="contextAction('edit')">编辑</div>
+        <div class="context-menu-item" onclick="contextAction('download')">下载</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="contextAction('rename')">重命名</div>
+        <div class="context-menu-item" onclick="contextAction('touch')">修改时间</div>
+        <div class="context-menu-item" onclick="contextAction('chmod')">修改权限</div>
+        <div class="context-menu-item" onclick="contextAction('info')">属性</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" style="color:#dc3545" onclick="contextAction('delete')">删除</div>
+    </div>
+
+    <script>
+        // 全局状态
+        let state = {
+            serverUrl: '',
+            password: '',
+            currentPath: '/',
+            selectedItem: null
+        };
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSavedServers();
+            document.addEventListener('click', () => hideContextMenu());
+
+            // 时间编辑实时预览
+            document.getElementById('timeEditDate').addEventListener('input', updateTimePreview);
+            document.getElementById('timeEditTime').addEventListener('input', updateTimePreview);
+        });
+
+        // 显示消息
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // API 请求
+        async function apiRequest(action, params = {}, method = 'GET', timeout = 600000) {
+            const url = new URL(state.serverUrl);
+
+            // action 和密码始终通过 URL 参数传递
+            url.searchParams.set('action', action);
+            url.searchParams.set('password', state.password);
+            // 防止浏览器缓存
+            url.searchParams.set('_t', Date.now());
+
+            // 检查是否为文件上传（params是FormData且包含file字段）
+            const isFileUpload = params instanceof FormData && params.has('file');
+
+            // 检查是否有content字段（需要用urlencoded body发送，避免URL过长）
+            const hasContent = !(params instanceof FormData) && params.hasOwnProperty('content');
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            const options = {
+                method,
+                signal: controller.signal
+            };
+
+            if (isFileUpload) {
+                // 文件上传：使用FormData body
+                options.body = params;
+            } else if (hasContent && method === 'POST') {
+                // 有content字段：使用application/x-www-form-urlencoded（Classic ASP可解析）
+                const urlParams = new URLSearchParams();
+                Object.keys(params).forEach(k => urlParams.append(k, params[k]));
+                options.body = urlParams;
+                options.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            } else {
+                // 其他参数：放到URL中
+                if (params instanceof FormData) {
+                    for (const [key, value] of params.entries()) {
+                        url.searchParams.set(key, value);
+                    }
+                } else {
+                    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+                }
+            }
+
+            try {
+                const response = await fetch(url, options);
+                clearTimeout(timeoutId);
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    return { success: false, message: '连接超时' };
+                }
+                return { success: false, message: '连接失败: ' + error.message };
+            }
+        }
+
+        // 连接服务器
+        async function connect() {
+            const url = document.getElementById('serverUrl').value.trim();
+            const password = document.getElementById('serverPassword').value;
+            const errorEl = document.getElementById('connectError');
+
+            if (!url) {
+                errorEl.textContent = '请输入服务器地址';
+                return;
+            }
+
+            state.serverUrl = url;
+            state.password = password;
+
+            errorEl.textContent = '连接中...';
+
+            // 使用list接口验证连接，5秒超时
+            const result = await apiRequest('list', { path: '/' }, 'GET', 5000);
+
+            if (result.success) {
+                saveServer(url);
+                document.getElementById('connectPanel').classList.add('hidden');
+                document.getElementById('mainApp').classList.add('active');
+                // 直接使用返回的数据渲染目录
+                state.currentPath = '/';
+                renderDirectory(result.data);
+                // 加载服务器信息
+                loadServerInfo();
+            } else {
+                errorEl.textContent = result.message || '连接失败';
+            }
+        }
+
+        // 加载服务器信息到头部
+        async function loadServerInfo() {
+            const result = await apiRequest('server');
+            if (result.success) {
+                const info = result.data;
+                document.getElementById('infoUser').textContent = info.current_user || '-';
+                document.getElementById('infoPhp').textContent = info.php_version;
+                document.getElementById('infoServer').textContent = info.server_software.split('/')[0];
+                document.getElementById('infoDisk').textContent = info.disk_free + ' / ' + info.disk_total;
+                document.getElementById('infoUpload').textContent = info.upload_max;
+            }
+        }
+
+        // 断开连接
+        function disconnect() {
+            state.serverUrl = '';
+            state.password = '';
+            state.currentPath = '/';
+            document.getElementById('connectPanel').classList.remove('hidden');
+            document.getElementById('mainApp').classList.remove('active');
+            document.getElementById('serverPassword').value = '';
+        }
+
+        // 保存服务器
+        function saveServer(url) {
+            let servers = JSON.parse(localStorage.getItem('servers') || '[]');
+            if (!servers.includes(url)) {
+                servers.unshift(url);
+                servers = servers.slice(0, 10);
+                localStorage.setItem('servers', JSON.stringify(servers));
+            }
+            loadSavedServers();
+        }
+
+        // 加载保存的服务器
+        function loadSavedServers() {
+            const servers = JSON.parse(localStorage.getItem('servers') || '[]');
+            const container = document.getElementById('savedServers');
+
+            if (servers.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            container.innerHTML = '<h3>保存的服务器</h3>' + servers.map(url => `
+                <div class="server-item">
+                    <span class="server-url" onclick="selectServer('${url}')">${url}</span>
+                    <span class="server-delete" onclick="deleteServer('${url}')">&times;</span>
+                </div>
+            `).join('');
+        }
+
+        function selectServer(url) {
+            document.getElementById('serverUrl').value = url;
+        }
+
+        function deleteServer(url) {
+            event.stopPropagation();
+            let servers = JSON.parse(localStorage.getItem('servers') || '[]');
+            servers = servers.filter(s => s !== url);
+            localStorage.setItem('servers', JSON.stringify(servers));
+            loadSavedServers();
+        }
+
+        // 渲染目录内容
+        function renderDirectory(data) {
+            const path = data.path;
+            console.log('[renderDirectory] Backend path:', path);
+            console.log('[renderDirectory] Old currentPath:', state.currentPath);
+            state.currentPath = path;
+            console.log('[renderDirectory] New currentPath:', state.currentPath);
+            document.getElementById('currentPath').textContent = path;
+            document.getElementById('uploadPath').textContent = path;
+            document.getElementById('createPath').textContent = path;
+            updatePathNav(path);
+
+            const fileList = document.getElementById('fileList');
+            const rows = [];
+            for (const item of data.items) {
+                try {
+                    const itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
+                    const pathEsc = escapeJs(item.path);
+                    const nameEsc = escapeJs(item.name);
+                    const nameHtml = escapeHtml(item.name);
+
+                    let actions = '';
+                    if (!item.is_dir && item.name !== '..') {
+                        actions += `<button class="btn-secondary" onclick="viewFile('${pathEsc}')">查看</button>`;
+                        actions += `<button class="btn-primary" onclick="editFile('${pathEsc}')">编辑</button>`;
+                        actions += `<button class="btn-success" onclick="downloadFile('${pathEsc}')">下载</button>`;
+                    }
+                    if (item.name !== '..') {
+                        actions += `<button class="btn-secondary" onclick="touchFile('${pathEsc}', ${item.mtime || 0})">时间</button>`;
+                        actions += `<button class="btn-secondary" onclick="openChmodModal('${pathEsc}')">权限</button>`;
+                        actions += `<button class="btn-danger" onclick="deleteItem('${pathEsc}', '${nameEsc}')">删除</button>`;
+                    }
+
+                    let badges = '';
+                    if (item.readable) badges += '<span class="badge badge-success">可读</span>';
+                    if (item.writable) badges += '<span class="badge badge-primary">可写</span>';
+                    if (!item.readable && !item.writable) badges += '<span class="badge badge-danger">无权限</span>';
+
+                    rows.push(`<tr oncontextmenu="showContextMenu(event, ${itemJson})">
+                        <td><div class="name-cell" onclick="itemClick(${itemJson})">
+                            <span class="icon">${item.is_dir ? '📁' : '📄'}</span>
+                            <span class="name">${nameHtml}</span>
+                        </div></td>
+                        <td class="size">${item.size_formatted}</td>
+                        <td class="perms">${item.perms}</td>
+                        <td class="time">${item.mtime ? formatTime(item.mtime) : '-'}</td>
+                        <td>${badges}</td>
+                        <td class="actions">${actions}</td>
+                    </tr>`);
+                } catch (e) {
+                    console.error('Error rendering item:', item, e);
+                    rows.push(`<tr><td colspan="6" style="color:red">Error: ${escapeHtml(item.name || 'unknown')}</td></tr>`);
+                }
+            }
+            fileList.innerHTML = rows.join('');
+        }
+
+        // 加载目录
+        async function loadDirectory(path) {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+
+            const result = await apiRequest('list', { path });
+
+            if (!result.success) {
+                fileList.innerHTML = `<tr><td colspan="6" class="loading" style="color:#dc3545">${result.message}</td></tr>`;
+                return;
+            }
+
+            renderDirectory(result.data);
+        }
+
+        // 更新路径导航
+        function updatePathNav(path) {
+            // Handle both Windows (\) and Unix (/) paths
+            const isWindows = path.includes('\\') || /^[A-Za-z]:/.test(path);
+            const sep = isWindows ? '\\' : '/';
+            const parts = path.split(/[\\\/]/).filter(p => p);
+
+            let html = '';
+            let currentPath = '';
+
+            if (isWindows && parts.length > 0 && /^[A-Za-z]:$/.test(parts[0])) {
+                // Windows drive letter (e.g., C:)
+                currentPath = parts[0] + '\\';
+                html += `<a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[0])}</a>`;
+                for (let i = 1; i < parts.length; i++) {
+                    currentPath += parts[i] + (i < parts.length - 1 ? '\\' : '');
+                    html += `<span class="sep">\\</span><a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[i])}</a>`;
+                }
+            } else {
+                // Unix path - always start with /
+                html += `<a href="javascript:void(0)" onclick="loadDirectory('/')">Root</a>`;
+                for (let i = 0; i < parts.length; i++) {
+                    currentPath = '/' + parts.slice(0, i + 1).join('/');
+                    html += `<span class="sep">/</span><a href="javascript:void(0)" onclick="loadDirectory('${escapeJs(currentPath)}')">${escapeHtml(parts[i])}</a>`;
+                }
+            }
+
+            document.getElementById('pathNav').innerHTML = html;
+        }
+
+        // 点击项目
+        function itemClick(item) {
+            if (item.is_dir) {
+                // 直接使用后端提供的路径（包括 ".." 的父目录路径）
+                loadDirectory(item.path);
+            } else {
+                viewFile(item.path);
+            }
+        }
+
+        // 查看文件
+        async function viewFile(path) {
+            const result = await apiRequest('read', { path });
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            document.getElementById('editorTitle').textContent = '查看: ' + path;
+            document.getElementById('editorContent').value = result.data.content;
+            document.getElementById('editorContent').readOnly = true;
+            document.getElementById('editorModal').classList.add('active');
+            state.editingPath = null;
+        }
+
+        // 编辑文件
+        async function editFile(path) {
+            const result = await apiRequest('read', { path });
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            document.getElementById('editorTitle').textContent = '编辑: ' + path;
+            document.getElementById('editorContent').value = result.data.content;
+            document.getElementById('editorContent').readOnly = false;
+            document.getElementById('editorModal').classList.add('active');
+            state.editingPath = path;
+        }
+
+        // 保存文件
+        async function saveFile() {
+            if (!state.editingPath) {
+                closeEditor();
+                return;
+            }
+
+            const content = document.getElementById('editorContent').value;
+            const result = await apiRequest('write', {
+                path: state.editingPath,
+                content: content
+            }, 'POST');
+
+            if (result.success) {
+                showToast('保存成功');
+                closeEditor();
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 关闭编辑器
+        function closeEditor() {
+            document.getElementById('editorModal').classList.remove('active');
+            state.editingPath = null;
+        }
+
+        // 下载文件
+        function downloadFile(path) {
+            const url = `${state.serverUrl}?action=download&path=${encodeURIComponent(path)}&password=${encodeURIComponent(state.password)}`;
+            window.open(url, '_blank');
+        }
+
+        // 上传文件
+        async function uploadFile() {
+            const fileInput = document.getElementById('uploadFile');
+            if (!fileInput.files.length) {
+                showToast('请选择文件', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('dir', state.currentPath);
+
+            const result = await apiRequest('upload', formData, 'POST');
+
+            if (result.success) {
+                showToast('上传成功');
+                fileInput.value = '';
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 构建路径，避免双斜杠和路径错误拼接
+        function buildPath(basePath, name) {
+            // 如果 name 是绝对路径，直接返回（不要拼接）
+            if (name.startsWith('/') || /^[A-Za-z]:/.test(name)) {
+                return name;
+            }
+            // 移除末尾斜杠
+            const cleanBase = basePath.replace(/[\/\\]+$/, '');
+            return cleanBase + '/' + name;
+        }
+
+        // 创建目录
+        async function createDir() {
+            const name = document.getElementById('newName').value.trim();
+            if (!name) {
+                showToast('请输入名称', 'error');
+                return;
+            }
+
+            const path = buildPath(state.currentPath, name);
+            const result = await apiRequest('mkdir', { path }, 'POST');
+
+            if (result.success) {
+                showToast('创建成功');
+                document.getElementById('newName').value = '';
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 创建文件
+        async function createFile() {
+            const name = document.getElementById('newName').value.trim();
+            if (!name) {
+                showToast('请输入名称', 'error');
+                return;
+            }
+
+            console.log('[createFile] state.currentPath:', state.currentPath);
+            console.log('[createFile] name:', name);
+            const path = buildPath(state.currentPath, name);
+            console.log('[createFile] final path:', path);
+            const result = await apiRequest('write', { path, content: '' }, 'POST');
+
+            if (result.success) {
+                showToast('创建成功');
+                document.getElementById('newName').value = '';
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 删除项目
+        async function deleteItem(path, name) {
+            if (!confirm(`确定要删除 "${name}" 吗？`)) return;
+
+            const result = await apiRequest('delete', { path }, 'POST');
+
+            if (result.success) {
+                showToast('删除成功');
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 右键菜单
+        function showContextMenu(event, item) {
+            event.preventDefault();
+            state.selectedItem = item;
+
+            const menu = document.getElementById('contextMenu');
+            menu.style.left = event.pageX + 'px';
+            menu.style.top = event.pageY + 'px';
+            menu.classList.add('active');
+        }
+
+        function hideContextMenu() {
+            document.getElementById('contextMenu').classList.remove('active');
+        }
+
+        function contextAction(action) {
+            const item = state.selectedItem;
+            if (!item) return;
+
+            switch (action) {
+                case 'open':
+                    itemClick(item);
+                    break;
+                case 'edit':
+                    editFile(item.path);
+                    break;
+                case 'download':
+                    downloadFile(item.path);
+                    break;
+                case 'rename':
+                    const newName = prompt('新名称:', item.name);
+                    if (newName && newName !== item.name) {
+                        renameItem(item.path, buildPath(state.currentPath, newName));
+                    }
+                    break;
+                case 'touch':
+                    touchFile(item.path, item.mtime);
+                    break;
+                case 'chmod':
+                    openChmodModal(item.path);
+                    break;
+                case 'info':
+                    showItemInfo(item.path);
+                    break;
+                case 'delete':
+                    deleteItem(item.path, item.name);
+                    break;
+            }
+            hideContextMenu();
+        }
+
+        // 打开时间修改模态框
+        function touchFile(path, currentTime) {
+            state.touchPath = path;
+            const date = currentTime ? new Date(currentTime * 1000) : new Date();
+
+            // 设置日期和时间输入框
+            const dateStr = date.toISOString().slice(0, 10);
+            const timeStr = date.toTimeString().slice(0, 8);
+
+            document.getElementById('timeEditPath').textContent = path;
+            document.getElementById('timeEditDate').value = dateStr;
+            document.getElementById('timeEditTime').value = timeStr;
+            updateTimePreview();
+
+            document.getElementById('timeModal').classList.add('active');
+        }
+
+        // 更新时间预览
+        function updateTimePreview() {
+            const dateVal = document.getElementById('timeEditDate').value;
+            const timeVal = document.getElementById('timeEditTime').value;
+            if (dateVal && timeVal) {
+                const preview = `${dateVal} ${timeVal}`;
+                document.getElementById('timePreview').textContent = preview;
+            }
+        }
+
+        // 关闭时间模态框
+        function closeTimeModal() {
+            document.getElementById('timeModal').classList.remove('active');
+            state.touchPath = null;
+        }
+
+        // 提交时间修改
+        async function submitTimeChange() {
+            if (!state.touchPath) {
+                closeTimeModal();
+                return;
+            }
+
+            const dateVal = document.getElementById('timeEditDate').value;
+            const timeVal = document.getElementById('timeEditTime').value;
+
+            if (!dateVal || !timeVal) {
+                showToast('请填写日期和时间', 'error');
+                return;
+            }
+
+            const timestamp = Math.floor(new Date(`${dateVal}T${timeVal}`).getTime() / 1000);
+            if (isNaN(timestamp)) {
+                showToast('时间格式错误', 'error');
+                return;
+            }
+
+            const result = await apiRequest('touch', { path: state.touchPath, time: timestamp }, 'POST');
+
+            if (result.success) {
+                showToast('修改时间成功');
+                closeTimeModal();
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 打开权限修改模态框
+        function openChmodModal(path) {
+            state.chmodPath = path;
+            document.getElementById('chmodPath').textContent = path;
+            document.getElementById('chmodMode').value = '';
+            document.getElementById('chmodOS').value = 'unix';
+            document.getElementById('chmodWinMode').value = 'readonly';
+            document.getElementById('chmodUser').value = '';
+            updateChmodOptions();
+            document.getElementById('chmodModal').classList.add('active');
+        }
+
+        // 更新chmod选项显示
+        function updateChmodOptions() {
+            const os = document.getElementById('chmodOS').value;
+            document.getElementById('chmodUnixOptions').style.display = os === 'unix' ? 'block' : 'none';
+            document.getElementById('chmodWindowsOptions').style.display = os === 'windows' ? 'block' : 'none';
+        }
+
+        // 监听Windows权限模式变化
+        document.getElementById('chmodWinMode').addEventListener('change', function() {
+            document.getElementById('chmodNtfsOptions').style.display = this.value === 'ntfs' ? 'block' : 'none';
+        });
+
+        // 关闭权限模态框
+        function closeChmodModal() {
+            document.getElementById('chmodModal').classList.remove('active');
+            state.chmodPath = null;
+        }
+
+        // 提交权限修改
+        async function submitChmod() {
+            if (!state.chmodPath) {
+                closeChmodModal();
+                return;
+            }
+
+            const os = document.getElementById('chmodOS').value;
+            let params = { path: state.chmodPath };
+
+            if (os === 'unix') {
+                const mode = document.getElementById('chmodMode').value.trim();
+                if (!mode) {
+                    showToast('请输入权限模式', 'error');
+                    return;
+                }
+                if (!/^[0-7]{3,4}$/.test(mode)) {
+                    showToast('权限格式错误，应为3-4位数字(如755)', 'error');
+                    return;
+                }
+                params.mode = mode;
+            } else {
+                const winMode = document.getElementById('chmodWinMode').value;
+                if (winMode === 'ntfs') {
+                    const user = document.getElementById('chmodUser').value.trim();
+                    if (!user) {
+                        showToast('请输入用户或组名', 'error');
+                        return;
+                    }
+                    params.mode = document.getElementById('chmodNtfsMode').value;
+                    params.user = user;
+                } else {
+                    params.mode = winMode;
+                }
+            }
+
+            const result = await apiRequest('chmod', params, 'POST');
+
+            if (result.success) {
+                showToast('权限修改成功');
+                closeChmodModal();
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 重命名
+        async function renameItem(oldPath, newPath) {
+            const result = await apiRequest('rename', {
+                old_path: oldPath,
+                new_path: newPath
+            }, 'POST');
+
+            if (result.success) {
+                showToast('重命名成功');
+                loadDirectory(state.currentPath);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        // 显示文件信息
+        async function showItemInfo(path) {
+            const result = await apiRequest('info', { path });
+
+            if (!result.success) {
+                showToast(result.message, 'error');
+                return;
+            }
+
+            const info = result.data;
+            alert(`文件信息:
+路径: ${info.path}
+大小: ${info.size_formatted}
+权限: ${info.perms} (${info.perms_octal})
+修改时间: ${formatTime(info.mtime)}
+创建时间: ${formatTime(info.ctime)}
+访问时间: ${formatTime(info.atime)}
+所有者ID: ${info.owner}
+组ID: ${info.group}`);
+        }
+
+        // 工具函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function escapeJs(str) {
+            if (!str) return '';
+            return str
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '\\"')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r')
+                .replace(/\t/g, '\\t')
+                .replace(/`/g, '\\`')
+                .replace(/\$/g, '\\$');
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeEditor();
+                closeTimeModal();
+                closeChmodModal();
+                hideContextMenu();
+            }
+        });
+    </script>
+</body>
+</html>
